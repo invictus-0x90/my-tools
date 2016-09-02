@@ -20,6 +20,8 @@
 #define SYSCALL_SEEN 0
 #define CLONE_SEEN 2
 
+char* get_name_field(char *filename);
+
 /* To find the pid of a shell process we open the proc directory
  * We then iterate through the folders in there, reading the status files
  * We want to look at the "Name: <binary>" field
@@ -29,6 +31,9 @@ void find_process()
 {
 	struct dirent *p_dirent;
 	DIR *dir;
+	char filename[256];
+
+	memset(filename, 0, sizeof(filename));
 
 	if((dir = opendir("/proc/")) == NULL)
 	{
@@ -42,11 +47,41 @@ void find_process()
 			break;
 	}
 
-	/* Debug information */
+	/* read the status files of the processes until we get a shell process */
 	while((p_dirent = readdir(dir)) != NULL)
-		printf("%s\n", p_dirent->d_name);
+	{
+		/* set the filename up ready to open the status file */
+		strcpy(filename, "/proc/");
+		strcat(filename, p_dirent->d_name);
+		strcat(filename, "/status");
 
+		/* Debug info */
+		char *program = get_name_field(filename);
+		printf("%s: %s\n", filename, program);
+		
+		memset(filename, 0, sizeof(filename)); //reset filename
+	}
 	
+}
+
+char* get_name_field(char *filename)
+{
+	FILE *fp;
+	char buff[50];
+	memset(buff, 0, sizeof(buff));
+	char *b = buff;
+
+	if((fp = fopen(filename, "r")) == NULL)
+	{
+		return NULL;
+	}
+
+	fseek(fp, 6, SEEK_CUR); //seek past the "Name:\t" field
+
+	fgets(buff, 40, fp); //grab the name, 40 bytes is more than enough
+	
+	return b;
+
 }
 
 void do_child(pid_t pid, char **argv)
