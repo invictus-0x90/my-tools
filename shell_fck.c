@@ -1,3 +1,4 @@
+#include <dirent.h>
 #include <stdio.h>
 #include <signal.h>
 #include <features.h>
@@ -18,6 +19,35 @@
 
 #define SYSCALL_SEEN 0
 #define CLONE_SEEN 2
+
+/* To find the pid of a shell process we open the proc directory
+ * We then iterate through the folders in there, reading the status files
+ * We want to look at the "Name: <binary>" field
+ * This will tell us what program is associated with the pid
+*/
+void find_process()
+{
+	struct dirent *p_dirent;
+	DIR *dir;
+
+	if((dir = opendir("/proc/")) == NULL)
+	{
+		printf("[!] Could not open directory [!]\n");
+	}
+
+	/* iterate past the first few entries of the process directory */
+	while((p_dirent = readdir(dir)) != NULL)
+	{
+		if(strcmp(p_dirent->d_name, "1") == 0) //we want to find the first process
+			break;
+	}
+
+	/* Debug information */
+	while((p_dirent = readdir(dir)) != NULL)
+		printf("%s\n", p_dirent->d_name);
+
+	
+}
 
 void do_child(pid_t pid, char **argv)
 {
@@ -208,7 +238,7 @@ void trace_child(pid_t pid)
 int main(int argc, char **argv)
 {
 	pid_t pid;
-
+	find_process();
 	if(argc == 2)
 	{
 		pid = atoi(argv[1]);
