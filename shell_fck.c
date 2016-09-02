@@ -22,16 +22,31 @@
 
 char* get_name_field(char *filename);
 
+/* We need a linked list to hold the pid's of all programs to search for */
+struct pid_struct
+{
+	pid_t pid;
+	struct pid_struct *next;
+}pid_struct;
+
 /* To find the pid of a shell process we open the proc directory
  * We then iterate through the folders in there, reading the status files
  * We want to look at the "Name: <binary>" field
  * This will tell us what program is associated with the pid
+ * needle is the type process we want to attach to
+ * not_pid is a pid we don't want to attach to, ie our current shell
 */
-void find_process()
+void find_process(char *needle, pid_t not_pid)
 {
+	char filename[256]; //buffer for filename
+
+	struct pid_struct *root = (struct pid_struct *) malloc(sizeof(pid_struct));
+	root->pid = 0;
+	root->next = NULL;
+	struct pid_struct *p = root;
+
 	struct dirent *p_dirent;
 	DIR *dir;
-	char filename[256];
 
 	memset(filename, 0, sizeof(filename));
 
@@ -55,19 +70,40 @@ void find_process()
 		strcat(filename, p_dirent->d_name);
 		strcat(filename, "/status");
 
-		/* Debug info */
 		char *program = get_name_field(filename);
+	
+		/* DEBUG */
 		printf("%s: %s\n", filename, program);
+
+		if(strncmp(program, needle, sizeof(needle)) == 0)
+		{
+			printf("[+] Found %s process pid: %s [+]\n", needle, p_dirent->d_name);
+			
+			/*add that pid to the pid_struct, typical linked list */
+			p->pid = atoi(p_dirent->d_name);
+			p->next = (struct pid_struct *) malloc(sizeof(pid_struct));
+			p = p->next;
+		}
 		
 		memset(filename, 0, sizeof(filename)); //reset filename
+	}
+
+	/* DEBUG */
+	p = root;
+	while(p->next != NULL)
+	{
+		printf("%d\n", p->pid);
+		p = p->next;
 	}
 	
 }
 
+/* We want to get the name associated with the pid */
 char* get_name_field(char *filename)
 {
 	FILE *fp;
 	char buff[50];
+
 	memset(buff, 0, sizeof(buff));
 	char *b = buff;
 
@@ -79,6 +115,11 @@ char* get_name_field(char *filename)
 	fseek(fp, 6, SEEK_CUR); //seek past the "Name:\t" field
 
 	fgets(buff, 40, fp); //grab the name, 40 bytes is more than enough
+	
+	int i = 0;
+	while(buff[++i] != '\n'); //handle the trailing new line
+
+	buff[i] = '\00';
 	
 	return b;
 
@@ -273,7 +314,7 @@ void trace_child(pid_t pid)
 int main(int argc, char **argv)
 {
 	pid_t pid;
-	find_process();
+	find_process("zsh", 0);
 	if(argc == 2)
 	{
 		pid = atoi(argv[1]);
