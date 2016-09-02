@@ -36,7 +36,7 @@ struct pid_struct
  * needle is the type process we want to attach to
  * not_pid is a pid we don't want to attach to, ie our current shell
 */
-void find_process(char *needle, pid_t not_pid)
+struct pid_struct* find_process(char *needle, pid_t not_pid)
 {
 	char filename[256]; //buffer for filename
 
@@ -53,6 +53,7 @@ void find_process(char *needle, pid_t not_pid)
 	if((dir = opendir("/proc/")) == NULL)
 	{
 		printf("[!] Could not open directory [!]\n");
+		return NULL;
 	}
 
 	/* iterate past the first few entries of the process directory */
@@ -88,14 +89,16 @@ void find_process(char *needle, pid_t not_pid)
 		memset(filename, 0, sizeof(filename)); //reset filename
 	}
 
-	/* DEBUG */
+	p = root;
+	return p;
+	/* DEBUG 
 	p = root;
 	while(p->next != NULL)
 	{
 		printf("%d\n", p->pid);
 		p = p->next;
 	}
-	
+	*/
 }
 
 /* We want to get the name associated with the pid */
@@ -314,7 +317,8 @@ void trace_child(pid_t pid)
 int main(int argc, char **argv)
 {
 	pid_t pid;
-	find_process("zsh", 0);
+	struct pid_struct *current_pids = find_process("zsh", 0);
+	
 	if(argc == 2)
 	{
 		pid = atoi(argv[1]);
