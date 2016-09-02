@@ -16,12 +16,14 @@
 #include <sys/wait.h>
 #include <sys/user.h>
 #include <sched.h>
+#include <getopt.h>
 
 #define SYSCALL_SEEN 0
 #define CLONE_SEEN 2
 
+void usage();
 char* get_name_field(char *filename);
-
+void trace_child(pid_t pid);
 /* We need a linked list to hold the pid's of all programs to search for */
 struct pid_struct
 {
@@ -178,46 +180,6 @@ void get_data(pid_t pid, unsigned long addr, struct user_regs_struct *regs)
 
 }
 
-void do_fork(pid_t pid)
-{
-	int status = 0;
-	struct user_regs_struct regs;
-
-	/* Set options so that we can trace syscalls in this new child */
-	ptrace(PTRACE_SETOPTIONS, pid, 0, PTRACE_O_TRACESYSGOOD);
-
-	/* similar to syscall_seen */
-	while(true)
-	{
-		/* Continue to next syscall and trap */
-		ptrace(PTRACE_SYSCALL, pid, 0,0);
-
-		waitpid(pid, &status, 0);
-
-		/* If the child has stopped and it is a syscall */
-		if(WIFSTOPPED(status) && WSTOPSIG(status) & 0x80)
-		{
-			ptrace(PTRACE_GETREGS, pid, 0, &regs); //lets get the registers
-			if(regs.orig_rax == 1) //sys_write
-			{
-				/* Here we can mess with the output */
-				get_data(pid, regs.rsi, &regs);
-
-				/* Continue to exit of child */
-				ptrace(PTRACE_SYSCALL, pid, 0, 0);
-				waitpid(pid, &status, 0);
-			}
-		}
-		/* Child exited */
-       		if(WIFEXITED(status))
-                {
-                       printf("Child exiting...\n");
-                       return;
-                }
-
-	}
-}
-
 bool new_child(int status)
 {
 	/* This is defined in the manpage for ptrace, we need to look for all events of a clone otherwise we may miss some */
@@ -245,8 +207,8 @@ int syscall_seen(pid_t pid)
 				/* Get the pid of the new child */
 				ptrace(PTRACE_GETEVENTMSG, pid, 0, &pid_child);
 				printf("[!] Process is spawning a new child. pid: %d\n", pid_child);
-
-				do_fork(pid_child); //do stuff on the grandchild
+				
+				trace_child(pid_child);
 				return SYSCALL_SEEN; //return control to trace_child()
 			}
 		}
@@ -292,6 +254,7 @@ void trace_child(pid_t pid)
 			ptrace(PTRACE_GETREGS, pid, 0, &registers);
 			/* get the data of a non-cloned write, ie pwd */
 			get_data(pid, registers.rsi, &registers);
+			
 			ptrace(PTRACE_SYSCALL, pid, 0, 0);
 			wait(&status);
 			//At this point we could goto start_of_loop, only if we care about matching up syscalls and their returns
@@ -319,21 +282,18 @@ void trace_child(pid_t pid)
 int main(int argc, char **argv)
 {
 	pid_t pid;
-
-	/* This is for testing purposes, will grab the "needle" from argv */
-	struct pid_struct *current_pids = find_process("sh", 0);
-
-	if(argc == 2)
+	char *process_name;
+	
+	/* use for friendly options parsing */	
+	struct option long_options[] = 
 	{
-		pid = atoi(argv[1]);
-		if(ptrace(PTRACE_ATTACH, pid, NULL, NULL) != 0)
-		{
-			printf("ATTACH_ERROR\n");
-			exit(0);
-		}
-		trace_child(pid);
-	}
-	else
+		{"pid", required_argument, 0, 'p'},
+		{"process_name", required_argument, 0, 'n'},
+		{"help", no_argument, 0, 'h'}
+	};
+
+	/* if user didn't give args, we just run the shell ourselves */
+	if(argc == 1)
 	{
 		pid = fork();
 
@@ -346,4 +306,44 @@ int main(int argc, char **argv)
 			trace_child(pid);
 		}
 	}
+	/* Otherwise, parse the users options and go from there */
+	else
+	{
+		int option;
+		int long_index = 0;
+		char *value;
+		while((option = getopt_long(argc, argv, "p:n:h", long_options, &long_index)) != -1)
+		{
+			switch(option)
+			{
+				case 'p':
+					pid = atoi(optarg);
+					printf("[+] Attempting to attach to pid: %d [+]\n", pid);
+
+					if(ptrace(PTRACE_ATTACH, pid, NULL, NULL) != 0)
+					{
+						printf("ATTACH_ERROR\n");
+						exit(0);
+					}
+
+					trace_child(pid);
+
+					break;
+				case 'n':
+					process_name = optarg;
+					struct pid_struct *current_pids = find_process(process_name, 0);
+					break;
+				case 'h':
+					usage();
+					break;
+			}
+		}
+	}
+
+}
+
+/* usage function */
+void usage()
+{
+	printf("Example Uses\n[1] ./shell_fck -p <pid_to_attach>\n[2] ./shell_fck -n <name_of_process> (ie sh, zsh, bash...)\n");
 }
