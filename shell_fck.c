@@ -40,6 +40,7 @@ struct pid_struct* find_process(char *needle, pid_t not_pid)
 {
 	char filename[256]; //buffer for filename
 
+	/* Bit of linked list setup */
 	struct pid_struct *root = (struct pid_struct *) malloc(sizeof(pid_struct));
 	root->pid = 0;
 	root->next = NULL;
@@ -74,7 +75,7 @@ struct pid_struct* find_process(char *needle, pid_t not_pid)
 		char *program = get_name_field(filename);
 	
 		/* DEBUG */
-		printf("%s: %s\n", filename, program);
+		//printf("%s: %s\n", filename, program);
 
 		if(strncmp(program, needle, sizeof(needle)) == 0)
 		{
@@ -91,14 +92,14 @@ struct pid_struct* find_process(char *needle, pid_t not_pid)
 
 	p = root;
 	return p;
-	/* DEBUG 
+	/*DEBUG */
 	p = root;
 	while(p->next != NULL)
 	{
 		printf("%d\n", p->pid);
 		p = p->next;
 	}
-	*/
+	
 }
 
 /* We want to get the name associated with the pid */
@@ -317,8 +318,10 @@ void trace_child(pid_t pid)
 int main(int argc, char **argv)
 {
 	pid_t pid;
-	struct pid_struct *current_pids = find_process("zsh", 0);
-	
+
+	/* This is for testing purposes, will grab the "needle" from argv */
+	struct pid_struct *current_pids = find_process("sh", 0);
+
 	if(argc == 2)
 	{
 		pid = atoi(argv[1]);
