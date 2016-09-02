@@ -42,8 +42,6 @@ struct pid_struct* find_process(char *needle, pid_t not_pid)
 
 	/* Bit of linked list setup */
 	struct pid_struct *root = (struct pid_struct *) malloc(sizeof(pid_struct));
-	root->pid = 0;
-	root->next = NULL;
 	struct pid_struct *p = root;
 
 	struct dirent *p_dirent;
@@ -89,6 +87,7 @@ struct pid_struct* find_process(char *needle, pid_t not_pid)
 		
 		memset(filename, 0, sizeof(filename)); //reset filename
 	}
+	closedir(dir);
 
 	p = root;
 	return p;
@@ -119,7 +118,8 @@ char* get_name_field(char *filename)
 	fseek(fp, 6, SEEK_CUR); //seek past the "Name:\t" field
 
 	fgets(buff, 40, fp); //grab the name, 40 bytes is more than enough
-	
+	fclose(fp);
+
 	int i = 0;
 	while(buff[++i] != '\n'); //handle the trailing new line
 
@@ -152,7 +152,7 @@ void get_data(pid_t pid, unsigned long addr, struct user_regs_struct *regs)
 	unsigned long tmp;
 
 	/* allocate stuff for messing with the data */
-	char str[] = "AAAAAAAA";
+	char str[] = "trololol";
 	long payload;
 
 	while(index < 4096)
@@ -173,7 +173,7 @@ void get_data(pid_t pid, unsigned long addr, struct user_regs_struct *regs)
 		index += sizeof(long);
 
 	}
-	printf("DATA FOUND:%s\n", val);
+	//printf("DATA FOUND:%s\n", val);
 	free(val);
 
 }
@@ -244,6 +244,7 @@ int syscall_seen(pid_t pid)
 				pid_t pid_child;
 				/* Get the pid of the new child */
 				ptrace(PTRACE_GETEVENTMSG, pid, 0, &pid_child);
+				printf("[!] Process is spawning a new child. pid: %d\n", pid_child);
 
 				do_fork(pid_child); //do stuff on the grandchild
 				return SYSCALL_SEEN; //return control to trace_child()
@@ -282,7 +283,7 @@ void trace_child(pid_t pid)
 
 
 		ptrace(PTRACE_GETREGS, pid, NULL, &registers);
-		printf("[!] System(%d)\n", registers.orig_rax); //Need to map syscalls numbers to names
+		//printf("[!] System(%d)\n", registers.orig_rax); //Need to map syscalls numbers to names
 
 		/* If the sys_write is called from the child process, and not a grandchild */
 		if(registers.orig_rax == 1)//1 = sys_write
@@ -300,12 +301,12 @@ void trace_child(pid_t pid)
 		{
 			//printf("stat(%p, %p)\n", registers.rdi, registers.rsi);
 			long tmp = ptrace(PTRACE_PEEKDATA, pid, registers.rdi);
-			printf("stat(%s, 0x%p)\n", &tmp, registers.rsi);
+			//printf("stat(%s, 0x%p)\n", &tmp, registers.rsi);
 		}
 		/* We can find the pid of a grandchild from here [not really needed] */
 		if(registers.orig_rax == 109) //sys_setpgid
 		{
-			printf("[!] Found pid of new process: %d\n", registers.rdi);
+			//printf("[!] Found pid of new process: %d\n", registers.rdi);
 		}
 
 		/* Here we grab the return value of the call */
