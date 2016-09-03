@@ -1,5 +1,5 @@
 #include "shell_fck.h"
-
+#include <pthread.h>
 /* To find the pid of a shell process we open the proc directory
  * We then iterate through the folders in there, reading the status files
  * We want to look at the "Name: <binary>" field
