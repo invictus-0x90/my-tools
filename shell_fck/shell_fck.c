@@ -71,14 +71,6 @@ struct pid_struct* find_process(char *needle, pid_t not_pid)
 
 	p = root;
 	return p;
-	/*DEBUG */
-	p = root;
-	while(p->next != NULL)
-	{
-		printf("%d\n", p->pid);
-		p = p->next;
-	}
-	
 }
 
 /* We want to get the name associated with the pid */
@@ -253,6 +245,7 @@ void trace_child(pid_t pid)
 		
 		/* We can use the retval to match up calls -> returns */
 		retval = ptrace(PTRACE_PEEKUSER, pid, sizeof(long)*RAX, NULL);
+
 		//printf("[pid: %d] System(%d) COMPLETE\n", pid, retval);
 	}
 }
