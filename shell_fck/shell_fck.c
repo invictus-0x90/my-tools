@@ -120,13 +120,14 @@ void get_data(pid_t pid, unsigned long addr, struct user_regs_struct *regs)
 {
 	/* Allocate memory for storing data */
 	char *val = malloc(8096);
-	memset(val, 4096, 0);
+	memset(val, 8096, 0);
 	int index = 0;
 	unsigned long tmp;
 
 	/* allocate stuff for messing with the data */
 	char str[] = "trololol";
 	long payload;
+	long cmp = 0x00000000;
 
 	while(index < 8096)
 	{
@@ -136,13 +137,15 @@ void get_data(pid_t pid, unsigned long addr, struct user_regs_struct *regs)
 		/* store the data at that address in val */
 		memcpy(val+index, &tmp, sizeof(long));
 
+		/* This is how we mess with the ouput */
+		memcpy(&payload, str, sizeof(str));
+		ptrace(PTRACE_POKEDATA, pid, regs->rsi+index, payload);
+		
+		
 		if (memchr(&tmp, 0, sizeof(tmp)) != NULL)
             		break;
-
-		/* This is how we mess with the ouput */
-		memcpy(&payload, str, 8);
-		ptrace(PTRACE_POKEDATA, pid, regs->rsi+index, payload);
-
+		
+        
 		index += sizeof(long);
 
 	}
@@ -222,49 +225,32 @@ void trace_child(pid_t pid)
 		//printf("[pid: %d] System(%d)\n", pid, registers.orig_rax); //Need to map syscalls numbers to names
 
 		/* If the sys_write is called from the child process, and not a grandchild */
-		if(registers.orig_rax == 0 && is_child)//1 = sys_write
+		if(registers.orig_rax == 0 && is_child)//1 = sys_read
 		{
-			/* We can mess with registers here */
-			ptrace(PTRACE_GETREGS, pid, 0, &registers);
-			//printf("read(%d, %p, %d)\n", registers.rdi, registers.rsi, registers.rdx);
-
 			/* For some reason when attaching to /bin/bash, we get stuck on read(3, "", 1)
 			 * Setting the registers to 0 fixes this
 			 * This needs to be handled better, the is_child boolean is a pretty shit fix
 			 * TODO: Find some way of tracing the grandchild, ie by checking the pid.
 			*/
-			if(registers.rdx == 1)
+			if(registers.rdx == 1)//for some reason it tries to read 1 byte
 			{
 				//registers.rdi = 3;
 				registers.rdx = 0;
-				ptrace(PTRACE_SETREGS, pid, 0, &registers);
-				/* get the data of a non-cloned write, ie pwd */
-				//get_data(pid, registers.rsi, &registers);
-			
-				ptrace(PTRACE_SYSCALL, pid, NULL, NULL);
-		
-				waitpid(pid, &status, 0);
-				goto start;
+				ptrace(PTRACE_SETREGS, pid, 0, &registers); //read(3, "", 0)
 			}
-			
-			
-			
-			//At this point we could goto start_of_loop, only if we care about matching up syscalls and their returns
 		}
 		/* Again, this is a pretty crap fix, maybe use a if(pid == grand_child_pid) */
-		if(registers.orig_rax == 1 && is_child)
+		if(registers.orig_rax == 1 && is_child) //sys_write
 		{
 			ptrace(PTRACE_GETREGS, pid, 0, &registers);
-			get_data(pid, registers.rsi, &registers);
-			ptrace(PTRACE_SYSCALL, pid, 0, 0);
-			wait(&status);
-			
+			get_data(pid, registers.rsi, &registers); //lets fuck stuff up
 		}
 		
 		/* Grab the return from a syscall */
 		if(syscall_seen(pid) != SYSCALL_SEEN) break;
+		
 		/* We can use the retval to match up calls -> returns */
-		retval = ptrace(PTRACE_PEEKUSER, pid, sizeof(long)*ORIG_RAX, NULL);
+		retval = ptrace(PTRACE_PEEKUSER, pid, sizeof(long)*RAX, NULL);
 		//printf("[pid: %d] System(%d) COMPLETE\n", pid, retval);
 	}
 }
