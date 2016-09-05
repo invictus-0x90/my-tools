@@ -34,7 +34,7 @@ void usage();
  * needle is the type process we want to attach to
  * not_pid is a pid we don't want to attach to, ie our current shell
 */
-char* get_name_field(char *filename);
+void get_name_field(char *filename, char *buff);
 
 
 void trace_child(pid_t pid);

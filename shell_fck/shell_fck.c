@@ -19,6 +19,7 @@ struct pid_struct* find_process(char *needle, pid_t not_pid)
 
 	struct dirent *p_dirent;
 	DIR *dir;
+	char program_buffer[50];
 
 	memset(filename, 0, sizeof(filename));
 
@@ -43,12 +44,18 @@ struct pid_struct* find_process(char *needle, pid_t not_pid)
 		strcat(filename, p_dirent->d_name);
 		strcat(filename, "/status");
 
-		char *program = get_name_field(filename);
+		get_name_field(filename, program_buffer);
 	
 		/* DEBUG */
 		//printf("%s: %s\n", filename, program);
-
-		if(strncmp(program, needle, sizeof(needle)) == 0)
+		if(strcmp(needle, "ALL") == 0)
+		{
+			p->pid = atoi(p_dirent->d_name);
+			printf("[+] Found %s process pid: %s [+]\n", program_buffer, p_dirent->d_name);
+			p->next = (struct pid_struct *) malloc(sizeof(pid_struct));
+			p = p->next;
+		}
+		else if(strncmp(program_buffer, needle, sizeof(needle)) == 0)
 		{
 			printf("[+] Found %s process pid: %s [+]\n", needle, p_dirent->d_name);
 			
@@ -75,31 +82,27 @@ struct pid_struct* find_process(char *needle, pid_t not_pid)
 }
 
 /* We want to get the name associated with the pid */
-char* get_name_field(char *filename)
+void get_name_field(char *filename, char *buff)
 {
 	FILE *fp;
-	char buff[50];
-
+	
 	memset(buff, 0, sizeof(buff));
-	char *b = buff;
+	
 
 	if((fp = fopen(filename, "r")) == NULL)
 	{
-		return NULL;
+		return;
 	}
 
 	fseek(fp, 6, SEEK_CUR); //seek past the "Name:\t" field
 
 	fgets(buff, 40, fp); //grab the name, 40 bytes is more than enough
 	fclose(fp);
-
+	
 	int i = 0;
 	while(buff[++i] != '\n'); //handle the trailing new line
 
 	buff[i] = '\00';
-	
-	return b;
-
 }
 
 void do_child(pid_t pid, char **argv)
@@ -127,8 +130,7 @@ void get_data(pid_t pid, unsigned long addr, struct user_regs_struct *regs)
 	/* allocate stuff for messing with the data */
 	char str[] = "trololol";
 	long payload;
-	long cmp = 0x00000000;
-
+	
 	while(index < 8096)
 	{
 		/* get the data at addr[index] */
@@ -265,6 +267,7 @@ int main(int argc, char **argv)
 	{
 		{"pid", required_argument, 0, 'p'},
 		{"process_name", required_argument, 0, 'n'},
+		{"List_processes", no_argument, 0 , 'l'},
 		{"help", no_argument, 0, 'h'}
 	};
 
@@ -288,7 +291,7 @@ int main(int argc, char **argv)
 		int option;
 		int long_index = 0;
 		char *value;
-		while((option = getopt_long(argc, argv, "p:n:h", long_options, &long_index)) != -1)
+		while((option = getopt_long(argc, argv, "p:n:lh", long_options, &long_index)) != -1)
 		{
 			switch(option)
 			{
@@ -309,6 +312,9 @@ int main(int argc, char **argv)
 					process_name = optarg;
 					struct pid_struct *current_pids = find_process(process_name, 0);
 					break;
+				case 'l':
+					find_process("ALL", 0);
+					break;
 				case 'h':
 					usage();
 					break;
@@ -321,5 +327,5 @@ int main(int argc, char **argv)
 /* usage function */
 void usage()
 {
-	printf("Example Uses\n[1] ./shell_fck -p <pid_to_attach>\n[2] ./shell_fck -n <name_of_process> (ie sh, zsh, bash...)\n");
+	printf("Example Uses\n[1] ./shell_fck -p <pid_to_attach>\n[2] ./shell_fck -n <name_of_process> (ie sh, zsh, bash...)\n[3] ./shell_fck -l (list running processes)\n");
 }
