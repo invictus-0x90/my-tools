@@ -7,6 +7,8 @@
  * needle is the type process we want to attach to
  * not_pid is a pid we don't want to attach to, ie our current shell
 */
+bool is_child = false;
+
 struct pid_struct* find_process(char *needle, pid_t not_pid)
 {
 	char filename[256]; //buffer for filename
@@ -177,8 +179,8 @@ int syscall_seen(pid_t pid)
 				/* Get the pid of the new child */
 				ptrace(PTRACE_GETEVENTMSG, pid, 0, &pid_child);
 				printf("[!] Process is spawning a new child. pid: %d\n", pid_child);
-	
-				trace_child(pid_child, true);
+				is_child = true;
+				trace_child(pid_child);
 				return SYSCALL_SEEN; //return control to trace_child()
 			}
 		}
@@ -190,13 +192,14 @@ int syscall_seen(pid_t pid)
 		/* Child exited */
 		if(WIFEXITED(status))
 		{
+			is_child = false;
 			printf("Child exiting...\n");
 			return 1;
 		}
 	}
 }
 
-void trace_child(pid_t pid, bool is_child)
+void trace_child(pid_t pid)
 {
 	int status = 0, syscall, retval;
 	struct user_regs_struct registers;
@@ -255,7 +258,7 @@ void trace_child(pid_t pid, bool is_child)
 			get_data(pid, registers.rsi, &registers);
 			ptrace(PTRACE_SYSCALL, pid, 0, 0);
 			wait(&status);
-			is_child = false;
+			
 		}
 		
 		/* Grab the return from a syscall */
@@ -290,7 +293,7 @@ int main(int argc, char **argv)
 		}
 		else
 		{
-			trace_child(pid, false);
+			trace_child(pid);
 		}
 	}
 	/* Otherwise, parse the users options and go from there */
@@ -313,7 +316,7 @@ int main(int argc, char **argv)
 						exit(0);
 					}
 
-					trace_child(pid, false);
+					trace_child(pid);
 
 					break;
 				case 'n':
