@@ -109,7 +109,7 @@ void do_child(pid_t pid, char **argv)
 	kill(getpid(), SIGSTOP);
 
 	/* do execve and stuff */
-	char *bin = "/bin/sh";
+	char *bin = "/bin/bash";
 	execv(bin, argv);
 
 }
@@ -117,7 +117,7 @@ void do_child(pid_t pid, char **argv)
 void get_data(pid_t pid, unsigned long addr, struct user_regs_struct *regs)
 {
 	/* Allocate memory for storing data */
-	char *val = malloc(4096);
+	char *val = malloc(8096);
 	memset(val, 4096, 0);
 	int index = 0;
 	unsigned long tmp;
@@ -126,7 +126,7 @@ void get_data(pid_t pid, unsigned long addr, struct user_regs_struct *regs)
 	char str[] = "trololol";
 	long payload;
 
-	while(index < 4096)
+	while(index < 8096)
 	{
 		/* get the data at addr[index] */
 		tmp = ptrace(PTRACE_PEEKDATA, pid, addr+index);
@@ -158,6 +158,7 @@ bool new_child(int status)
 int syscall_seen(pid_t pid)
 {
 	int status = 0;
+	
 	/* Here we loop until we either see a syscall or a new child process is created */
 	while(true)
 	{
@@ -165,7 +166,7 @@ int syscall_seen(pid_t pid)
 		ptrace(PTRACE_SYSCALL, pid, 0,0);
 
 		waitpid(pid, &status, 0); //wait for something to happen
-
+		
 		/* We want to see if the process has been trapped */
 		if(WSTOPSIG(status) == SIGTRAP && WIFSTOPPED(status))
 		{
@@ -176,8 +177,8 @@ int syscall_seen(pid_t pid)
 				/* Get the pid of the new child */
 				ptrace(PTRACE_GETEVENTMSG, pid, 0, &pid_child);
 				printf("[!] Process is spawning a new child. pid: %d\n", pid_child);
-				
-				trace_child(pid_child);
+	
+				trace_child(pid_child, true);
 				return SYSCALL_SEEN; //return control to trace_child()
 			}
 		}
@@ -195,56 +196,73 @@ int syscall_seen(pid_t pid)
 	}
 }
 
-void trace_child(pid_t pid)
+void trace_child(pid_t pid, bool is_child)
 {
 	int status = 0, syscall, retval;
 	struct user_regs_struct registers;
-
 	/* These flags are needed to determine syscalls from systraps, and to trace clones */
 	long flags = PTRACE_O_TRACESYSGOOD | PTRACE_O_TRACECLONE | PTRACE_O_TRACEFORK | PTRACE_O_TRACEVFORK;
 
 	waitpid(pid, &status, 0); //wait for sigstop
+
 	ptrace(PTRACE_SETOPTIONS, pid, 0, flags); //set ptrace options, so we can get syscalls//	
 
 	int flag;
 	while(true)
 	{
+		start:
 		/* Wait for the first sigtrap when a syscall is hit */
 		if(syscall_seen(pid) != SYSCALL_SEEN) break;
 
 
 		ptrace(PTRACE_GETREGS, pid, NULL, &registers);
-		//printf("[!] System(%d)\n", registers.orig_rax); //Need to map syscalls numbers to names
+		//printf("[pid: %d] System(%d)\n", pid, registers.orig_rax); //Need to map syscalls numbers to names
 
 		/* If the sys_write is called from the child process, and not a grandchild */
-		if(registers.orig_rax == 1)//1 = sys_write
+		if(registers.orig_rax == 0 && is_child)//1 = sys_write
 		{
 			/* We can mess with registers here */
 			ptrace(PTRACE_GETREGS, pid, 0, &registers);
-			/* get the data of a non-cloned write, ie pwd */
-			get_data(pid, registers.rsi, &registers);
+			//printf("read(%d, %p, %d)\n", registers.rdi, registers.rsi, registers.rdx);
+
+			/* For some reason when attaching to /bin/bash, we get stuck on read(3, "", 1)
+			 * Setting the registers to 0 fixes this
+			 * This needs to be handled better, the is_child boolean is a pretty shit fix
+			 * TODO: Find some way of tracing the grandchild, ie by checking the pid.
+			*/
+			if(registers.rdx == 1)
+			{
+				//registers.rdi = 3;
+				registers.rdx = 0;
+				ptrace(PTRACE_SETREGS, pid, 0, &registers);
+				/* get the data of a non-cloned write, ie pwd */
+				//get_data(pid, registers.rsi, &registers);
 			
-			ptrace(PTRACE_SYSCALL, pid, 0, 0);
-			wait(&status);
+				ptrace(PTRACE_SYSCALL, pid, NULL, NULL);
+		
+				waitpid(pid, &status, 0);
+				goto start;
+			}
+			
+			
+			
 			//At this point we could goto start_of_loop, only if we care about matching up syscalls and their returns
 		}
-		/* We can use the sys_stat call to find all programs run from cmdline */
-		if(registers.orig_rax == 4) //stat
+		/* Again, this is a pretty crap fix, maybe use a if(pid == grand_child_pid) */
+		if(registers.orig_rax == 1 && is_child)
 		{
-			//printf("stat(%p, %p)\n", registers.rdi, registers.rsi);
-			long tmp = ptrace(PTRACE_PEEKDATA, pid, registers.rdi);
-			//printf("stat(%s, 0x%p)\n", &tmp, registers.rsi);
+			ptrace(PTRACE_GETREGS, pid, 0, &registers);
+			get_data(pid, registers.rsi, &registers);
+			ptrace(PTRACE_SYSCALL, pid, 0, 0);
+			wait(&status);
+			is_child = false;
 		}
-		/* We can find the pid of a grandchild from here [not really needed] */
-		if(registers.orig_rax == 109) //sys_setpgid
-		{
-			//printf("[!] Found pid of new process: %d\n", registers.rdi);
-		}
-
-		/* Here we grab the return value of the call */
-		//if(syscall_seen(pid) != SYSCALL_SEEN) break;
+		
+		/* Grab the return from a syscall */
+		if(syscall_seen(pid) != SYSCALL_SEEN) break;
 		/* We can use the retval to match up calls -> returns */
 		retval = ptrace(PTRACE_PEEKUSER, pid, sizeof(long)*ORIG_RAX, NULL);
+		//printf("[pid: %d] System(%d) COMPLETE\n", pid, retval);
 	}
 }
 
@@ -272,7 +290,7 @@ int main(int argc, char **argv)
 		}
 		else
 		{
-			trace_child(pid);
+			trace_child(pid, false);
 		}
 	}
 	/* Otherwise, parse the users options and go from there */
@@ -295,7 +313,7 @@ int main(int argc, char **argv)
 						exit(0);
 					}
 
-					trace_child(pid);
+					trace_child(pid, false);
 
 					break;
 				case 'n':
