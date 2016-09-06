@@ -51,7 +51,7 @@ int main(int argc, char **argv)
 		}
 		else
 		{
-			trace_child(pid);
+			//trace_child(pid);
 		}
 	}
 	/* Otherwise, parse the users options and go from there */
@@ -75,7 +75,7 @@ int main(int argc, char **argv)
 					proc->next = NULL;
 
 					/* Create a new thread to handle messing with the process */
-					if(pthread_create(&thread_id, NULL, init_thread, &pid)) 
+					if(pthread_create(&thread_id, NULL, init_thread, proc)) 
 						printf("[!] Error creating thread [!]\n");
 
 					pthread_join(thread_id, NULL); //wait for the thread to finish
@@ -100,16 +100,16 @@ int main(int argc, char **argv)
 
 void *init_thread(void *args)
 {
-	pid_t *pid = (pid_t *)args;
+	struct pid_struct *proc = (struct pid_struct *)args;
 
-	printf("[+] Attempting to attach to pid: %d [+]\n", *pid);
-	ptrace(PTRACE_ATTACH, *pid, NULL, NULL);
+	printf("[+] Attempting to attach to pid: %d [+]\n", proc->pid);
+	ptrace(PTRACE_ATTACH, proc->pid, NULL, NULL);
 
-	printf("[+] Calling trace child on pid: %d\n", *pid);
-	trace_child(*pid);
+	printf("[+] Calling trace child on pid: %d\n", proc->pid);
+	trace_child(proc);
 }
 
-void trace_child(pid_t pid)
+void trace_child(struct pid_struct *proc)
 {
 	int status = 0, syscall, retval;
 	struct user_regs_struct registers;
@@ -118,21 +118,21 @@ void trace_child(pid_t pid)
 
 	//pid = waitpid(pid, &status, 0); //wait for sigstop
 	
-	ptrace(PTRACE_SETOPTIONS, pid, 0, flags); //set ptrace options, so we can get syscalls//	
-	printf("[+] Tracing pid: %d\n", pid);
+	ptrace(PTRACE_SETOPTIONS, proc->pid, 0, flags); //set ptrace options, so we can get syscalls//	
+	printf("[+] Tracing pid: %d\n", proc->pid);
 	int flag;
 	while(true)
 	{
 		start:
 		/* Wait for the first sigtrap when a syscall is hit */
-		if(syscall_seen(pid) != SYSCALL_SEEN) break;
+		if(syscall_seen(proc) != SYSCALL_SEEN) break;
 
 
-		ptrace(PTRACE_GETREGS, pid, NULL, &registers);
+		ptrace(PTRACE_GETREGS, proc->pid, NULL, &registers);
 		//printf("[pid: %d] System(%d)\n", pid, registers.orig_rax); //Need to map syscalls numbers to names
 
 		/* If the sys_write is called from the child process, and not a grandchild */
-		if(registers.orig_rax == 0 && is_child)//1 = sys_read
+		if(registers.orig_rax == 0 && proc->is_child)//1 = sys_read
 		{
 			/* For some reason when attaching to /bin/bash, we get stuck on read(3, "", 1)
 			 * Setting the registers to 0 fixes this
@@ -143,27 +143,27 @@ void trace_child(pid_t pid)
 			{
 				//registers.rdi = 3;
 				registers.rdx = 0;
-				ptrace(PTRACE_SETREGS, pid, 0, &registers); //read(3, "", 0)
+				ptrace(PTRACE_SETREGS, proc->pid, 0, &registers); //read(3, "", 0)
 			}
 		}
 		/* Again, this is a pretty crap fix, maybe use a if(pid == grand_child_pid) */
-		if(registers.orig_rax == 1 && is_child) //sys_write
+		if(registers.orig_rax == 1 && proc->is_child) //sys_write
 		{
-			ptrace(PTRACE_GETREGS, pid, 0, &registers);
-			get_data(pid, registers.rsi, &registers); //lets fuck stuff up
+			ptrace(PTRACE_GETREGS, proc->pid, 0, &registers);
+			get_data(proc->pid, registers.rsi, &registers); //lets fuck stuff up
 		}
 		
 		/* Grab the return from a syscall */
-		if(syscall_seen(pid) != SYSCALL_SEEN) break;
+		if(syscall_seen(proc) != SYSCALL_SEEN) break;
 		
 		/* We can use the retval to match up calls -> returns */
-		retval = ptrace(PTRACE_PEEKUSER, pid, sizeof(long)*RAX, NULL);
+		retval = ptrace(PTRACE_PEEKUSER, proc->pid, sizeof(long)*RAX, NULL);
 
 		//printf("[pid: %d] System(%d) COMPLETE\n", pid, retval);
 	}
 }
 
-int syscall_seen(pid_t pid)
+int syscall_seen(struct pid_struct *proc)
 {
 	int status = 0;
 	
@@ -171,9 +171,9 @@ int syscall_seen(pid_t pid)
 	while(true)
 	{
 		/* Tell the child to continue until the next syscall */
-		ptrace(PTRACE_SYSCALL, pid, 0,0);
+		ptrace(PTRACE_SYSCALL, proc->pid, 0,0);
 
-		waitpid(pid, &status, 0); //wait for something to happen
+		waitpid(proc->pid, &status, 0); //wait for something to happen
 		
 		/* We want to see if the process has been trapped */
 		if(WSTOPSIG(status) == SIGTRAP && WIFSTOPPED(status))
@@ -182,16 +182,25 @@ int syscall_seen(pid_t pid)
 			if(new_child(status))
 			{
 				pid_t pid_child;
+
+				struct pid_struct *child_proc = (struct pid_struct *)malloc(sizeof(pid_struct));
+
 				/* Get the pid of the new child */
-				ptrace(PTRACE_GETEVENTMSG, pid, 0, &pid_child);
-				printf("[!] Process is spawning a new child. pid: %d\n", pid_child);
+				ptrace(PTRACE_GETEVENTMSG, proc->pid, 0, &pid_child);
+
+				child_proc->pid = pid_child;
+				child_proc->next = NULL;
+				child_proc->is_child = true;
+
+				printf("[!] Process is spawning a new child. pid: %d\n", child_proc->pid);
 
 				/* lock the global is_child variable to this thread */
-				pthread_mutex_lock(&mutex1);
-				is_child = true;
-				pthread_mutex_unlock(&mutex1);
+				//pthread_mutex_lock(&mutex1);
+				//is_child = true;
+				//pthread_mutex_unlock(&mutex1);
 
-				trace_child(pid_child);
+				trace_child(child_proc);
+				
 				return SYSCALL_SEEN; //return control to trace_child()
 			}
 		}
@@ -203,9 +212,9 @@ int syscall_seen(pid_t pid)
 		/* Child exited */
 		if(WIFEXITED(status))
 		{
-			pthread_mutex_lock(&mutex1);
-			is_child = false;
-			pthread_mutex_unlock(&mutex1);
+			//pthread_mutex_lock(&mutex1);
+			if(proc->is_child) free(proc);
+			//pthread_mutex_unlock(&mutex1);
 			printf("Child exiting...\n");
 			return 1;
 		}

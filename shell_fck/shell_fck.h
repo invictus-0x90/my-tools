@@ -21,6 +21,15 @@
 #define SYSCALL_SEEN 0
 #define CLONE_SEEN 2
 
+/* We need a linked list to hold the pid's of all programs to search for */
+struct pid_struct
+{
+	pid_t pid; //store the pid
+	bool is_child; //used to determine if this proc is a child of another proc
+	char *proc_name; //store the program associated with the pid
+	struct pid_struct *next; //pointer to next pid
+}pid_struct;
+
 /* function prologues */
 
 /* Simple usage function */
@@ -35,13 +44,6 @@ void usage();
  * not_pid is a pid we don't want to attach to, ie our current shell
 */
 void get_name_field(char *filename, char *buff);
-
-
-
-
-
-
-void trace_child(pid_t pid);
 
 
 
@@ -84,17 +86,13 @@ bool new_child(int status);
 
 
 
-
-
-
-int syscall_seen(pid_t pid);
-
+int syscall_seen(struct pid_struct *proc);
 
 
 
 
 
-void trace_child(pid_t pid);
+void trace_child(struct pid_struct *proc);
 
 /* This is an init function used for pthread_create
  * Using this function means we don't have to mess with trace_child
@@ -107,11 +105,3 @@ void *init_thread(void *args);
 
 int main(int argc, char **argv);
 
-/* We need a linked list to hold the pid's of all programs to search for */
-struct pid_struct
-{
-	pid_t pid; //store the pid
-	bool is_child; //used to determine if this proc is a child of another proc
-	char *proc_name; //store the program associated with the pid
-	struct pid_struct *next; //pointer to next pid
-}pid_struct;
