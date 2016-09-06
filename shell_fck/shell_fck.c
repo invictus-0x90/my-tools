@@ -67,6 +67,12 @@ int main(int argc, char **argv)
 				case 'p':
 					pid = atoi(optarg);
 					pthread_t thread_id;
+					struct pid_struct *proc = (struct pid_struct *) malloc(sizeof(pid_struct));
+
+					proc->pid = pid;
+					proc->proc_name = "";
+					proc->is_child = false;
+					proc->next = NULL;
 
 					/* Create a new thread to handle messing with the process */
 					if(pthread_create(&thread_id, NULL, init_thread, &pid)) 
@@ -77,6 +83,7 @@ int main(int argc, char **argv)
 				case 'n':
 					process_name = optarg;
 					struct pid_struct *current_pids = find_process(process_name, 0);
+					free(current_pids);
 					break;
 				case 'l':
 					find_process("ALL", 0);
@@ -289,9 +296,14 @@ struct pid_struct* find_process(char *needle, pid_t not_pid)
 		//printf("%s: %s\n", filename, program);
 		if(strcmp(needle, "ALL") == 0)
 		{
+			/* create a new pid struct with the details we have found */
 			p->pid = atoi(p_dirent->d_name);
-			printf("[+] Found %s process pid: %s [+]\n", program_buffer, p_dirent->d_name);
+			p->is_child = false;
+			p->proc_name = program_buffer;
 			p->next = (struct pid_struct *) malloc(sizeof(pid_struct));
+
+			printf("[+] Found %s process pid: %d [+]\n", p->proc_name, p->pid);
+
 			p = p->next;
 		}
 		else if(strncmp(program_buffer, needle, sizeof(needle)) == 0)

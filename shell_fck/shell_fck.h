@@ -110,7 +110,8 @@ int main(int argc, char **argv);
 /* We need a linked list to hold the pid's of all programs to search for */
 struct pid_struct
 {
-	pid_t pid;
-	struct pid_struct *next;
-	//bool is_child;
+	pid_t pid; //store the pid
+	bool is_child; //used to determine if this proc is a child of another proc
+	char *proc_name; //store the program associated with the pid
+	struct pid_struct *next; //pointer to next pid
 }pid_struct;
