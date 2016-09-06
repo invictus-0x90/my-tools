@@ -39,6 +39,8 @@ void get_name_field(char *filename, char *buff);
 
 void trace_child(pid_t pid);
 
+void *init_thread(void *args);
+
 
 /* We need a linked list to hold the pid's of all programs to search for */
 struct pid_struct

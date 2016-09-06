@@ -1,12 +1,7 @@
 #include "shell_fck.h"
 #include <pthread.h>
-/* To find the pid of a shell process we open the proc directory
- * We then iterate through the folders in there, reading the status files
- * We want to look at the "Name: <binary>" field
- * This will tell us what program is associated with the pid
- * needle is the type process we want to attach to
- * not_pid is a pid we don't want to attach to, ie our current shell
-*/
+
+pthread_mutex_t mutex1 = PTHREAD_MUTEX_INITIALIZER;
 bool is_child = false;
 
 struct pid_struct* find_process(char *needle, pid_t not_pid)
@@ -19,7 +14,7 @@ struct pid_struct* find_process(char *needle, pid_t not_pid)
 
 	struct dirent *p_dirent;
 	DIR *dir;
-	char program_buffer[50];
+	char program_buffer[50]; //buffer to hold program name associate with pid
 
 	memset(filename, 0, sizeof(filename));
 
@@ -176,7 +171,9 @@ int syscall_seen(pid_t pid)
 				/* Get the pid of the new child */
 				ptrace(PTRACE_GETEVENTMSG, pid, 0, &pid_child);
 				printf("[!] Process is spawning a new child. pid: %d\n", pid_child);
+				pthread_mutex_lock(&mutex1);
 				is_child = true;
+				pthread_mutex_unlock(&mutex1);
 				trace_child(pid_child);
 				return SYSCALL_SEEN; //return control to trace_child()
 			}
@@ -189,7 +186,9 @@ int syscall_seen(pid_t pid)
 		/* Child exited */
 		if(WIFEXITED(status))
 		{
+			pthread_mutex_lock(&mutex1);
 			is_child = false;
+			pthread_mutex_unlock(&mutex1);
 			printf("Child exiting...\n");
 			return 1;
 		}
@@ -203,10 +202,10 @@ void trace_child(pid_t pid)
 	/* These flags are needed to determine syscalls from systraps, and to trace clones */
 	long flags = PTRACE_O_TRACESYSGOOD | PTRACE_O_TRACECLONE | PTRACE_O_TRACEFORK | PTRACE_O_TRACEVFORK;
 
-	waitpid(pid, &status, 0); //wait for sigstop
-
+	//pid = waitpid(pid, &status, 0); //wait for sigstop
+	
 	ptrace(PTRACE_SETOPTIONS, pid, 0, flags); //set ptrace options, so we can get syscalls//	
-
+	printf("[+] Tracing pid: %d\n", pid);
 	int flag;
 	while(true)
 	{
@@ -261,6 +260,7 @@ int main(int argc, char **argv)
 		{"pid", required_argument, 0, 'p'},
 		{"process_name", required_argument, 0, 'n'},
 		{"List_processes", no_argument, 0 , 'l'},
+		//{"inject_code", }
 		{"help", no_argument, 0, 'h'}
 	};
 
@@ -290,16 +290,13 @@ int main(int argc, char **argv)
 			{
 				case 'p':
 					pid = atoi(optarg);
-					printf("[+] Attempting to attach to pid: %d [+]\n", pid);
-
-					if(ptrace(PTRACE_ATTACH, pid, NULL, NULL) != 0)
-					{
-						printf("[!] ATTACH_ERROR [!]\n");
-						exit(0);
-					}
-
-					trace_child(pid);
-
+					pthread_t thread_id;
+					
+					/* Create a new thread to handle messing with the process */
+					if(pthread_create(&thread_id, NULL, init_thread, &pid)) 
+						printf("[!] Error creating thread [!]\n");
+					
+					pthread_join(thread_id, NULL); //wait for the thread to finish
 					break;
 				case 'n':
 					process_name = optarg;
@@ -315,6 +312,21 @@ int main(int argc, char **argv)
 		}
 	}
 
+}
+
+/* This is an init function used for pthread_create
+ * Using this function means we don't have to mess with trace_child
+ * The process has to be attached here otherwise the thread has no access to it.
+*/
+void *init_thread(void *args)
+{
+	pid_t *pid = (pid_t *)args;
+
+	printf("[+] Attempting to attach to pid: %d [+]\n", *pid);
+	ptrace(PTRACE_ATTACH, *pid, NULL, NULL);
+
+	printf("[+] Calling trace child on pid: %d\n", *pid);
+	trace_child(*pid);
 }
 
 /* usage function */
