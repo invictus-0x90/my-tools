@@ -291,11 +291,11 @@ int main(int argc, char **argv)
 				case 'p':
 					pid = atoi(optarg);
 					pthread_t thread_id;
-					
+
 					/* Create a new thread to handle messing with the process */
 					if(pthread_create(&thread_id, NULL, init_thread, &pid)) 
 						printf("[!] Error creating thread [!]\n");
-					
+
 					pthread_join(thread_id, NULL); //wait for the thread to finish
 					break;
 				case 'n':
