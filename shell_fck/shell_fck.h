@@ -37,14 +37,80 @@ void usage();
 void get_name_field(char *filename, char *buff);
 
 
+
+
+
+
 void trace_child(pid_t pid);
+
+
+
+
+
+
 
 void *init_thread(void *args);
 
+
+
+
+
+
+
+
+struct pid_struct* find_process(char *needle, pid_t not_pid);
+
+
+
+
+
+
+
+void do_child(pid_t pid, char **argv);
+
+
+
+
+
+
+void get_data(pid_t pid, unsigned long addr, struct user_regs_struct *regs);
+
+
+
+
+
+
+bool new_child(int status);
+
+
+
+
+
+
+int syscall_seen(pid_t pid);
+
+
+
+
+
+
+void trace_child(pid_t pid);
+
+/* This is an init function used for pthread_create
+ * Using this function means we don't have to mess with trace_child
+ * The process has to be attached here otherwise the thread has no access to it.
+*/
+void *init_thread(void *args);
+
+
+
+
+int main(int argc, char **argv);
 
 /* We need a linked list to hold the pid's of all programs to search for */
 struct pid_struct
 {
 	pid_t pid;
 	struct pid_struct *next;
+	//bool is_child;
 }pid_struct;
