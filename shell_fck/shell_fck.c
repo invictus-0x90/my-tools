@@ -98,15 +98,10 @@ int main(int argc, char **argv)
 	/* using if(false) for testing purposes */
 	if(true)
 	{
+		/* Initialise hash table */
 		struct pid_hash_table *my_table = (struct pid_hash_table *)malloc(sizeof(pid_hash_table));
 		my_table->size = 500;
-		struct pid_struct *proc_list = find_process("bash", 0);
-		struct pid_struct *p = proc_list;
-
-		while(p->next != NULL)
-		{
-			
-		}
+		memset(my_table->table, 0, sizeof(my_table->table));
 
 		while(true)
 		{
@@ -118,12 +113,44 @@ int main(int argc, char **argv)
 			 * 4) attach to those processes using threads
 			 * 5) sleep for a set amount of time so we don't hog system resources
 			*/
+			/* Step 1, grab the current processes */
+			struct pid_struct *proc_list = find_process("ALL", 0); //testing for bash first
+			struct pid_struct *p = proc_list;
+
+			update_hash_table(p, my_table);
+
 			break;
 		}
 	}
 
 }
 
+void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *current_table)
+{
+	/* iterate over the current process list */
+	while(current_pids->next != NULL)
+	{
+		/* We set the bucket position to the pid modulo bucket size */
+		int bucket_position = (current_pids->pid % current_table->size);
+		printf("Bucket position: %d\n", bucket_position);
+
+		/* We need to create a tmp pid struct to check if that position has a pid in it */
+		struct pid_struct tmp = current_table->table[bucket_position];
+		
+		if(tmp.pid == 0) //this means that the position is free
+		{
+			//add the pid to the table
+			current_table->table[bucket_position] = *current_pids;
+		}
+		else
+		{
+			//deal with collisions here
+			printf("Position %d already occupied\n", bucket_position);
+		}
+		current_pids = current_pids->next;
+
+	}
+}
 
 void *init_thread(void *args)
 {
