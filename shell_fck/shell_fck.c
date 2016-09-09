@@ -136,19 +136,21 @@ void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *c
 
 		/* We need to create a tmp pid struct to check if that position has a pid in it */
 		struct pid_struct tmp = current_table->table[bucket_position];
-		
+
 		if(tmp.pid == 0) //this means that the position is free
 		{
+			
 			//add the pid to the table
-			current_table->table[bucket_position] = *current_pids;
-		}
-		else
-		{
-			//deal with collisions here
-			printf("Position %d already occupied\n", bucket_position);
+			struct pid_struct *new_pid = (struct pid_struct *) malloc(sizeof(pid_struct));
+			new_pid->pid = current_pids->pid;
+			new_pid->is_child = current_pids->is_child;
+			new_pid->next = NULL;
+
+			strcpy(new_pid->proc_name, current_pids->proc_name);
+			current_table->table[bucket_position] = *new_pid;
+			
 		}
 		current_pids = current_pids->next;
-
 	}
 }
 
