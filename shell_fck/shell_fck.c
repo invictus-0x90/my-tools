@@ -1,5 +1,4 @@
 #include "shell_fck.h"
-#include <pthread.h>
 
 pthread_mutex_t mutex1 = PTHREAD_MUTEX_INITIALIZER;
 bool is_child = false;
@@ -119,6 +118,18 @@ int main(int argc, char **argv)
 
 			update_hash_table(p, my_table);
 			update_hash_table(p, my_table);
+
+			//debug
+			for(int i = 0; i < 500; i++)
+			{
+				struct pid_struct *p = &my_table->table[i];
+				while(p != NULL)
+				{
+					printf("[%d]: %s -> ", p->pid, p->proc_name);
+					p = p->next;
+				}
+				printf("\n");
+			}
 			
 			break;
 		}
@@ -136,7 +147,7 @@ void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *c
 		/* We need to create a tmp pid struct to check if that position has a pid in it */
 		struct pid_struct *tmp = &current_table->table[bucket_position];
 
-		if(tmp == NULL) //this means that the position is free
+		if(tmp->pid == 0) //this means that the position is free
 		{
 			//add the pid to the table
 			struct pid_struct *new_pid = create_pid_struct(current_pids->pid, current_pids->proc_name, current_pids->is_child, NULL);
