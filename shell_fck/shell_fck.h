@@ -36,6 +36,19 @@ struct pid_hash_table
 	struct pid_struct table[500];
 	int size;
 }pid_hash_table;
+
+struct pid_struct *create_pid_struct(pid_t pid, char *buff, bool is_child, struct pid_struct *n)
+{
+	struct pid_struct *new_pid = (struct pid_struct *)malloc(sizeof(pid_struct));
+
+	new_pid->pid = pid;
+	new_pid->is_child = is_child;
+	new_pid->next = n;
+	strcpy(new_pid->proc_name, buff);
+
+	return new_pid;
+}
+
 /* function prologues */
 
 /* Simple usage function */
