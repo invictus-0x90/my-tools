@@ -70,7 +70,7 @@ int main(int argc, char **argv)
 					struct pid_struct *proc = (struct pid_struct *) malloc(sizeof(pid_struct));
 
 					proc->pid = pid;
-					proc->proc_name = "";
+					memset(proc->proc_name, 0, sizeof(proc->proc_name));
 					proc->is_child = false;
 					proc->next = NULL;
 
@@ -92,6 +92,33 @@ int main(int argc, char **argv)
 					usage();
 					break;
 			}
+		}
+	}
+
+	/* using if(false) for testing purposes */
+	if(true)
+	{
+		struct pid_hash_table *my_table = (struct pid_hash_table *)malloc(sizeof(pid_hash_table));
+		my_table->size = 500;
+		struct pid_struct *proc_list = find_process("bash", 0);
+		struct pid_struct *p = proc_list;
+
+		while(p->next != NULL)
+		{
+			
+		}
+
+		while(true)
+		{
+			/*
+			 * I want to create a simple process that does the following
+			 * 1) iterate over all the processes on the system
+			 * 2) update a hash table by adding/deleting processes that are/arent running
+			 * 3) decide which processes to attach to
+			 * 4) attach to those processes using threads
+			 * 5) sleep for a set amount of time so we don't hog system resources
+			*/
+			break;
 		}
 	}
 
@@ -306,9 +333,11 @@ struct pid_struct* find_process(char *needle, pid_t not_pid)
 		if(strcmp(needle, "ALL") == 0)
 		{
 			/* create a new pid struct with the details we have found */
+			memset(p->proc_name, 0, sizeof(p->proc_name));
 			p->pid = atoi(p_dirent->d_name);
 			p->is_child = false;
-			p->proc_name = program_buffer;
+			strncpy(p->proc_name, program_buffer, sizeof(p->proc_name));
+
 			p->next = (struct pid_struct *) malloc(sizeof(pid_struct));
 
 			printf("[+] Found %s process pid: %d [+]\n", p->proc_name, p->pid);
@@ -320,7 +349,10 @@ struct pid_struct* find_process(char *needle, pid_t not_pid)
 			printf("[+] Found %s process pid: %s [+]\n", needle, p_dirent->d_name);
 			
 			/*add that pid to the pid_struct, typical linked list */
+			memset(p->proc_name, 0, sizeof(p->proc_name));
 			p->pid = atoi(p_dirent->d_name);
+			p->is_child = false;
+			strncpy(p->proc_name, program_buffer, sizeof(p->proc_name));
 			p->next = (struct pid_struct *) malloc(sizeof(pid_struct));
 			p = p->next;
 		}

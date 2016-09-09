@@ -26,10 +26,16 @@ struct pid_struct
 {
 	pid_t pid; //store the pid
 	bool is_child; //used to determine if this proc is a child of another proc
-	char *proc_name; //store the program associated with the pid
+	char proc_name[50]; //store the program associated with the pid
 	struct pid_struct *next; //pointer to next pid
 }pid_struct;
 
+/* Simple hash table to store pid_structs */
+struct pid_hash_table
+{
+	struct pid_struct table[500];
+	int size;
+}pid_hash_table;
 /* function prologues */
 
 /* Simple usage function */
