@@ -1,8 +1,5 @@
 #include "shell_fck.h"
 
-//pthread_mutex_t mutex1 = PTHREAD_MUTEX_INITIALIZER;
-//bool is_child = false;
-
 /* Mainly used for debugging */
 void do_child(pid_t pid, char **argv)
 {
@@ -47,10 +44,6 @@ int main(int argc, char **argv)
 		if(pid == 0)
 		{
 			do_child(pid, argv);
-		}
-		else
-		{
-			//trace_child(pid);
 		}
 	}
 	/* Otherwise, parse the users options and go from there */
@@ -103,53 +96,59 @@ int main(int argc, char **argv)
 
 		pthread_t thread_id;
 
+		/* Null out the buckets */
 		for(int i = 0; i < 500; i++)
 			my_table->table[i] = NULL;
-		//memset(my_table->table, , sizeof(my_table->table));
-
+		
 		while(true)
 		{
-			/*
-			 * I want to create a simple process that does the following
-			 * 1) iterate over all the processes on the system
-			 * 2) update a hash table by adding/deleting processes that are/arent running
-			 * 3) decide which processes to attach to	
-		 	 * 4) attach to those processes using threads
-			 * 5) sleep for a set amount of time so we don't hog system resources
-			*/
-			/* Step 1, grab the current processes */
 			struct pid_struct *proc_list = find_process("bash", my_table);
-
+			
+			/* proc_list == NULL when no bash processes running */
 			if(proc_list != NULL)
 				update_hash_table(proc_list, my_table);
+			/* Just delete stuff from the hash table */
+			else
+				update_hash_table(NULL, my_table);
 
+			/* Iterate over the hashtable and decide which processes to attach to */
 			for(int i = 0; i < 500; i++)
 			{
 				struct pid_struct *proc = my_table->table[i];
 
 				if(proc != NULL)
 				{
-					if(strcmp(proc->proc_name, "bash") == 0 && proc->is_alive && !proc->being_traced)
+					while(proc != NULL)
 					{
-						pthread_create(&thread_id, NULL, init_thread, proc);
-						sleep(5);
-						proc->being_traced = true;
+						if(strcmp(proc->proc_name, "bash") == 0 && proc->is_alive && !proc->being_traced)
+						{
+							pthread_create(&thread_id, NULL, init_thread, proc);
+							proc->being_traced = true; //mark this process as being traced
+						}
+						if(proc->next == NULL)
+							break;
+						else
+							proc = proc->next;
 					}
 				}
 			}
 
 			//Debug
-			
 			for(int i = 0; i < 500; i++)
 			{
-				struct pid_struct *x = my_table->table[i];
-				while(x != NULL)
+				if(my_table->table[i] != NULL)
 				{
-					printf("[%d:%d]%s -> ",i,x->pid, x->proc_name);
-					x = x->next;
+
+
+					struct pid_struct *x = my_table->table[i];
+					while(x != NULL)
+					{
+						printf("[%d:%d]%s -> ",i,x->pid, x->proc_name);
+						x = x->next;
+						if(x == NULL)
+							printf("\n");
+					}
 				}
-				if(x != NULL)
-					printf("\n");
 			}
 			
 			struct pid_struct *p = proc_list;
@@ -185,7 +184,7 @@ void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *c
 		while(p != NULL)
 		{
 			/* If the process has been marked as no longer running */
-			if(pid_alive(p) == false)
+			if(!pid_alive(p))
 			{
 				if(p->next == NULL)
 				{
@@ -200,8 +199,14 @@ void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *c
 			p = p->next;
 		}
 	}
+
+	/* this is here to ensure we can still delete entries in the hash table
+	 * without segfaulting on iterating over a null process list.
+	*/
+	if(current_pids == NULL)
+		return;
 	/* iterate over the current process list */
-	while(current_pids != NULL)
+	while(current_pids->next != NULL)
 	{
 		if(current_pids == NULL)
 			break;
@@ -255,8 +260,6 @@ void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *c
 }
 	
 
-
-
 void *init_thread(void *args)
 {
 	struct pid_struct *proc = (struct pid_struct *)args;
@@ -275,11 +278,9 @@ void trace_child(struct pid_struct *proc)
 	/* These flags are needed to determine syscalls from systraps, and to trace clones */
 	long flags = PTRACE_O_TRACESYSGOOD | PTRACE_O_TRACECLONE | PTRACE_O_TRACEFORK | PTRACE_O_TRACEVFORK;
 
-	//pid = waitpid(pid, &status, 0); //wait for sigstop
-	
 	ptrace(PTRACE_SETOPTIONS, proc->pid, 0, flags); //set ptrace options, so we can get syscalls//	
 	printf("[+] Tracing pid: %d\n", proc->pid);
-	int flag;
+
 	while(true)
 	{
 		start:
@@ -365,10 +366,11 @@ int syscall_seen(struct pid_struct *proc)
 		/* Child exited */
 		if(WIFEXITED(status))
 		{
-			//pthread_mutex_lock(&mutex1);
-			if(proc->is_child) free(proc);
-			else proc->is_alive = false; //this child is ready to be removed from the hashtable
-			//pthread_mutex_unlock(&mutex1);
+			if(proc->is_child) 
+				free(proc);
+			else 
+				proc->is_alive = false; //this child is ready to be removed from the hashtable
+			
 			printf("Child exiting...\n");
 			
 			return 1;
@@ -480,30 +482,26 @@ struct pid_struct* find_process(char *needle, struct pid_hash_table *current_tab
 		}
 		else if(strncmp(program_buffer, needle, sizeof(needle)) == 0)
 		{
-			struct pid_struct *tmp = current_table->table[pid%500];
-
-			if(tmp == NULL && !in_table(pid, current_table))
-			{
-				found = true;
-				printf("[+] Found %s process pid: %s [+]\n", needle, p_dirent->d_name);
-				/*add that pid to the pid_struct, typical linked list */
-				memset(p->proc_name, 0, sizeof(p->proc_name));
-				p->pid = pid;
-				p->is_child = false;
-				p->is_alive = true;
-				p->being_traced = false;
-				strncpy(p->proc_name, program_buffer, sizeof(p->proc_name));
-				p->next = (struct pid_struct *) malloc(sizeof(pid_struct));
-				p = p->next;
-			}
-
+			found = true;
+			printf("[+] Found %s process pid: %s [+]\n", needle, p_dirent->d_name);
+				
+			/*add that pid to the pid_struct, typical linked list */
+			memset(p->proc_name, 0, sizeof(p->proc_name));
+			p->pid = pid;
+			p->is_child = false;
+			p->is_alive = true;
+			p->being_traced = false;
+			strncpy(p->proc_name, program_buffer, sizeof(p->proc_name));
 			
+			p->next = (struct pid_struct *) malloc(sizeof(pid_struct));
+			p = p->next;
 		}
 		
 		memset(filename, 0, sizeof(filename)); //reset filename
 	}
 	closedir(dir);
 
+	/* We need to differentiate between finding a process list and not */
 	if(!found)
 	{
 		free(root);
@@ -511,7 +509,7 @@ struct pid_struct* find_process(char *needle, struct pid_hash_table *current_tab
 	}
 	else
 	{
-		//p = root;
+		free(p->next); //free the malloced next pointer
 		return root;
 	}
 	

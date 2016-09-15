@@ -38,6 +38,7 @@ void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *c
 void remove_from_table(struct pid_struct *pid_delete, struct pid_struct *root)
 {
 	struct pid_struct *p = root;
+	struct pid_struct *prev;
 	while(p != NULL)
 	{
 		/* Look for the pid to delete */
