@@ -121,6 +121,17 @@ int main(int argc, char **argv)
 
 			update_hash_table(p, my_table);
 
+			for(int i = 0; i < 500; i++)
+			{
+				struct pid_struct *x = my_table->table[i];
+				while(x != NULL)
+				{
+					printf("[%d:%d]%s -> ",i,x->pid, x->proc_name);
+					x = x->next;
+				}
+				printf("\n");
+			}
+
 			/* free proc_list */
 			while(p->next != NULL)
 			{
@@ -130,7 +141,8 @@ int main(int argc, char **argv)
 			}
 			
 			/* Sleep to save system resources */
-			sleep(30);
+			sleep(5);
+			
 			//break;
 		}
 	}
@@ -161,7 +173,6 @@ void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *c
 			p = p->next;
 		}
 	}
-	
 	/* iterate over the current process list */
 	while(current_pids->next != NULL)
 	{
@@ -179,16 +190,33 @@ void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *c
 		}
 		else
 		{
+			struct pid_struct *root_p = tmp;
+			bool already_in_table = false;
+
+			/* Is the process already in our table */
+			while(root_p != NULL)
+			{
+				/* If so, we don't need to add it */
+				if(compare_pids(root_p, current_pids))
+				{
+					already_in_table = true;
+					goto end; //jump to the end
+				}
+				root_p = root_p->next;
+			}
+			/* If the goto above is not executed, find the end of the linked list */
 			while(tmp->next != NULL)
 			{
 				tmp = tmp->next;
 			}
+			/* Add the new process to the chain in the hash table */
 			struct pid_struct *new_pid = create_pid_struct(current_pids->pid, current_pids->proc_name, current_pids->is_child, NULL);
 			tmp->next = new_pid;
+			
 		}
+		end:
 		current_pids = current_pids->next;
 	}
-	
 	
 }
 	
@@ -278,14 +306,14 @@ int syscall_seen(struct pid_struct *proc)
 			/* If the child has created a new child, we trace that until it exits.  defined in man(ptrace)*/
 			if(new_child(status))
 			{
-				pid_t pid_child;
+				pid_t *pid_child;
 
 				struct pid_struct *child_proc = (struct pid_struct *)malloc(sizeof(pid_struct));
 
 				/* Get the pid of the new child */
-				ptrace(PTRACE_GETEVENTMSG, proc->pid, 0, &pid_child);
+				ptrace(PTRACE_GETEVENTMSG, proc->pid, 0, pid_child);
 
-				child_proc->pid = pid_child;
+				child_proc->pid = *pid_child;
 				child_proc->next = NULL;
 				child_proc->is_child = true;
 
