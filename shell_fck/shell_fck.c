@@ -1,7 +1,7 @@
 #include "shell_fck.h"
 
-pthread_mutex_t mutex1 = PTHREAD_MUTEX_INITIALIZER;
-bool is_child = false;
+//pthread_mutex_t mutex1 = PTHREAD_MUTEX_INITIALIZER;
+//bool is_child = false;
 
 /* Mainly used for debugging */
 void do_child(pid_t pid, char **argv)
@@ -100,7 +100,10 @@ int main(int argc, char **argv)
 		/* Initialise hash table */
 		struct pid_hash_table *my_table = (struct pid_hash_table *)malloc(sizeof(pid_hash_table));
 		my_table->size = 500;
-		memset(my_table->table, 0, sizeof(my_table->table));
+
+		for(int i = 0; i < 500; i++)
+			my_table->table[i] = NULL;
+		//memset(my_table->table, , sizeof(my_table->table));
 
 		while(true)
 		{
@@ -108,29 +111,16 @@ int main(int argc, char **argv)
 			 * I want to create a simple process that does the following
 			 * 1) iterate over all the processes on the system
 			 * 2) update a hash table by adding/deleting processes that are/arent running
-			 * 3) decide which processes to attach to
-			 * 4) attach to those processes using threads
+			 * 3) decide which processes to attach to	
+		 	 * 4) attach to those processes using threads
 			 * 5) sleep for a set amount of time so we don't hog system resources
 			*/
 			/* Step 1, grab the current processes */
-			struct pid_struct *proc_list = find_process("ALL", 0); //testing for bash first
+			struct pid_struct *proc_list = find_process("ALL", 0); 
 			struct pid_struct *p = proc_list;
 
 			update_hash_table(p, my_table);
-			update_hash_table(p, my_table);
-
-			//debug
-			for(int i = 0; i < 500; i++)
-			{
-				struct pid_struct *p = &my_table->table[i];
-				while(p != NULL)
-				{
-					printf("[%d]: %s -> ", p->pid, p->proc_name);
-					p = p->next;
-				}
-				printf("\n");
-			}
-			
+       		
 			break;
 		}
 	}
@@ -139,21 +129,43 @@ int main(int argc, char **argv)
 
 void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *current_table)
 {
+	/* Before adding new processes to the table, we delete any that have been marked as dead */
+	for(int i = 0; i < 500; i++)
+	{
+		struct pid_struct *p = current_table->table[i];
+		while(p != NULL)
+		{
+			/* If the process has been marked as no longer running */
+			if(pid_alive(p) == false)
+			{
+				if(p->next == NULL)
+				{
+					free(current_table->table[i]);
+					current_table->table[i] = NULL;
+				}
+				else
+				{
+					remove_from_table(p, current_table->table[i]);
+				}
+			}
+			p = p->next;
+		}
+	}
+	
 	/* iterate over the current process list */
 	while(current_pids->next != NULL)
 	{
 		/* We set the bucket position to the pid modulo bucket size */
 		int bucket_position = (current_pids->pid % current_table->size);
-		/* We need to create a tmp pid struct to check if that position has a pid in it */
-		struct pid_struct *tmp = &current_table->table[bucket_position];
 
-		if(tmp->pid == 0) //this means that the position is free
+		/* We need to create a tmp pid struct to check if that position has a pid in it */
+		struct pid_struct *tmp = current_table->table[bucket_position];
+
+		if(tmp == NULL) //this means that the position is free
 		{
 			//add the pid to the table
 			struct pid_struct *new_pid = create_pid_struct(current_pids->pid, current_pids->proc_name, current_pids->is_child, NULL);
-			current_table->table[bucket_position] = *new_pid;
-
-			free(new_pid);
+			current_table->table[bucket_position] = new_pid;
 		}
 		else
 		{
@@ -166,7 +178,8 @@ void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *c
 		}
 		current_pids = current_pids->next;
 	}
-		
+	
+	
 }
 	
 
@@ -290,6 +303,7 @@ int syscall_seen(struct pid_struct *proc)
 			if(proc->is_child) free(proc);
 			//pthread_mutex_unlock(&mutex1);
 			printf("Child exiting...\n");
+			proc->is_alive = false; //this child is ready to be removed from the hashtable
 			return 1;
 		}
 	}

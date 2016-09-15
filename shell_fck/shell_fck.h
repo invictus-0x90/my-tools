@@ -35,6 +35,27 @@ void usage();
 void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *current_table);
 
 
+void remove_from_table(struct pid_struct *pid_delete, struct pid_struct *root)
+{
+	struct pid_struct *p = root;
+	while(p != NULL)
+	{
+		/* Look for the pid to delete */
+		if(p->next == NULL)
+		{
+			free(p);
+			return;
+		}
+		else if(compare_pids(p->next, pid_delete))
+		{
+			p->next = pid_delete->next;
+			free(p);
+			return;
+		}
+		p = p->next;
+	}
+}
+
 /* To find the pid of a shell process we open the proc directory
  * We then iterate through the folders in there, reading the status files
  * We want to look at the "Name: <binary>" field
