@@ -101,6 +101,8 @@ int main(int argc, char **argv)
 		struct pid_hash_table *my_table = (struct pid_hash_table *)malloc(sizeof(pid_hash_table));
 		my_table->size = 500;
 
+		pthread_t thread_id;
+
 		for(int i = 0; i < 500; i++)
 			my_table->table[i] = NULL;
 		//memset(my_table->table, , sizeof(my_table->table));
@@ -116,11 +118,28 @@ int main(int argc, char **argv)
 			 * 5) sleep for a set amount of time so we don't hog system resources
 			*/
 			/* Step 1, grab the current processes */
-			struct pid_struct *proc_list = find_process("ALL", 0); 
-			struct pid_struct *p = proc_list;
+			struct pid_struct *proc_list = find_process("bash", my_table);
 
-			update_hash_table(p, my_table);
+			if(proc_list != NULL)
+				update_hash_table(proc_list, my_table);
 
+			for(int i = 0; i < 500; i++)
+			{
+				struct pid_struct *proc = my_table->table[i];
+
+				if(proc != NULL)
+				{
+					if(strcmp(proc->proc_name, "bash") == 0 && proc->is_alive && !proc->being_traced)
+					{
+						pthread_create(&thread_id, NULL, init_thread, proc);
+						sleep(5);
+						proc->being_traced = true;
+					}
+				}
+			}
+
+			//Debug
+			
 			for(int i = 0; i < 500; i++)
 			{
 				struct pid_struct *x = my_table->table[i];
@@ -129,24 +148,32 @@ int main(int argc, char **argv)
 					printf("[%d:%d]%s -> ",i,x->pid, x->proc_name);
 					x = x->next;
 				}
-				printf("\n");
-			}
-
-			/* free proc_list */
-			while(p->next != NULL)
-			{
-				struct pid_struct *tmp = p->next;
-				free(p);
-				p = tmp;
+				if(x != NULL)
+					printf("\n");
 			}
 			
+			struct pid_struct *p = proc_list;
+
+			printf("SLEEP\n");
 			/* Sleep to save system resources */
-			sleep(5);
+			sleep(30);
 			
 			//break;
 		}
 	}
 
+}
+
+bool in_table(pid_t pid, struct pid_hash_table *table)
+{
+	struct pid_struct *tmp = table->table[pid%500];
+	while(tmp != NULL)
+	{
+		if(tmp->pid == pid)
+			return true;
+
+		tmp = tmp->next;
+	}
 }
 
 void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *current_table)
@@ -174,8 +201,10 @@ void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *c
 		}
 	}
 	/* iterate over the current process list */
-	while(current_pids->next != NULL)
+	while(current_pids != NULL)
 	{
+		if(current_pids == NULL)
+			break;
 		/* We set the bucket position to the pid modulo bucket size */
 		int bucket_position = (current_pids->pid % current_table->size);
 
@@ -202,6 +231,9 @@ void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *c
 					already_in_table = true;
 					goto end; //jump to the end
 				}
+				if(!root_p->is_alive)
+					goto end;
+
 				root_p = root_p->next;
 			}
 			/* If the goto above is not executed, find the end of the linked list */
@@ -212,10 +244,12 @@ void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *c
 			/* Add the new process to the chain in the hash table */
 			struct pid_struct *new_pid = create_pid_struct(current_pids->pid, current_pids->proc_name, current_pids->is_child, NULL);
 			tmp->next = new_pid;
+			new_pid->next = NULL;
 			
 		}
 		end:
 		current_pids = current_pids->next;
+
 	}
 	
 }
@@ -306,24 +340,18 @@ int syscall_seen(struct pid_struct *proc)
 			/* If the child has created a new child, we trace that until it exits.  defined in man(ptrace)*/
 			if(new_child(status))
 			{
-				pid_t *pid_child;
+				pid_t pid_child;
 
 				struct pid_struct *child_proc = (struct pid_struct *)malloc(sizeof(pid_struct));
 
 				/* Get the pid of the new child */
-				ptrace(PTRACE_GETEVENTMSG, proc->pid, 0, pid_child);
+				ptrace(PTRACE_GETEVENTMSG, proc->pid, 0, &pid_child);
 
-				child_proc->pid = *pid_child;
+				child_proc->pid = pid_child;
 				child_proc->next = NULL;
 				child_proc->is_child = true;
 
 				printf("[!] Process is spawning a new child. pid: %d\n", child_proc->pid);
-
-				/* lock the global is_child variable to this thread */
-				//pthread_mutex_lock(&mutex1);
-				//is_child = true;
-				//pthread_mutex_unlock(&mutex1);
-
 				trace_child(child_proc);
 				
 				return SYSCALL_SEEN; //return control to trace_child()
@@ -339,9 +367,10 @@ int syscall_seen(struct pid_struct *proc)
 		{
 			//pthread_mutex_lock(&mutex1);
 			if(proc->is_child) free(proc);
+			else proc->is_alive = false; //this child is ready to be removed from the hashtable
 			//pthread_mutex_unlock(&mutex1);
 			printf("Child exiting...\n");
-			proc->is_alive = false; //this child is ready to be removed from the hashtable
+			
 			return 1;
 		}
 	}
@@ -390,13 +419,15 @@ bool new_child(int status)
 	return (status >> 8 == (SIGTRAP | (PTRACE_EVENT_CLONE << 8))) || (status >> 8) == (SIGTRAP | (PTRACE_EVENT_FORK << 8))  || (status >> 8) == (SIGTRAP | (PTRACE_EVENT_VFORK << 8));
 }
 
-struct pid_struct* find_process(char *needle, pid_t not_pid)
+struct pid_struct* find_process(char *needle, struct pid_hash_table *current_table)
 {
 	char filename[256]; //buffer for filename
 
 	/* Bit of linked list setup */
 	struct pid_struct *root = (struct pid_struct *) malloc(sizeof(pid_struct));
 	struct pid_struct *p = root;
+
+	bool found = false;
 
 	struct dirent *p_dirent;
 	DIR *dir;
@@ -426,15 +457,19 @@ struct pid_struct* find_process(char *needle, pid_t not_pid)
 		strcat(filename, "/status");
 
 		get_name_field(filename, program_buffer);
-	
+		pid_t pid = atoi(p_dirent->d_name);
+
 		/* DEBUG */
 		//printf("%s: %s\n", filename, program);
 		if(strcmp(needle, "ALL") == 0)
 		{
+			found = true;
 			/* create a new pid struct with the details we have found */
 			memset(p->proc_name, 0, sizeof(p->proc_name));
-			p->pid = atoi(p_dirent->d_name);
+			p->pid = pid;
 			p->is_child = false;
+			p->is_alive = true;
+			p->being_traced = false;
 			strncpy(p->proc_name, program_buffer, sizeof(p->proc_name));
 
 			p->next = (struct pid_struct *) malloc(sizeof(pid_struct));
@@ -445,23 +480,41 @@ struct pid_struct* find_process(char *needle, pid_t not_pid)
 		}
 		else if(strncmp(program_buffer, needle, sizeof(needle)) == 0)
 		{
-			printf("[+] Found %s process pid: %s [+]\n", needle, p_dirent->d_name);
+			struct pid_struct *tmp = current_table->table[pid%500];
+
+			if(tmp == NULL && !in_table(pid, current_table))
+			{
+				found = true;
+				printf("[+] Found %s process pid: %s [+]\n", needle, p_dirent->d_name);
+				/*add that pid to the pid_struct, typical linked list */
+				memset(p->proc_name, 0, sizeof(p->proc_name));
+				p->pid = pid;
+				p->is_child = false;
+				p->is_alive = true;
+				p->being_traced = false;
+				strncpy(p->proc_name, program_buffer, sizeof(p->proc_name));
+				p->next = (struct pid_struct *) malloc(sizeof(pid_struct));
+				p = p->next;
+			}
+
 			
-			/*add that pid to the pid_struct, typical linked list */
-			memset(p->proc_name, 0, sizeof(p->proc_name));
-			p->pid = atoi(p_dirent->d_name);
-			p->is_child = false;
-			strncpy(p->proc_name, program_buffer, sizeof(p->proc_name));
-			p->next = (struct pid_struct *) malloc(sizeof(pid_struct));
-			p = p->next;
 		}
 		
 		memset(filename, 0, sizeof(filename)); //reset filename
 	}
 	closedir(dir);
 
-	p = root;
-	return p;
+	if(!found)
+	{
+		free(root);
+		return NULL;
+	}
+	else
+	{
+		//p = root;
+		return root;
+	}
+	
 }
 
 /* We want to get the name associated with the pid */

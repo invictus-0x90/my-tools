@@ -80,7 +80,7 @@ void *init_thread(void *args);
 
 
 
-struct pid_struct* find_process(char *needle, pid_t not_pid);
+struct pid_struct* find_process(char *needle, struct pid_hash_table *current_table);
 
 
 

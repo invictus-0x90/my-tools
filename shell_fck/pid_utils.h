@@ -10,6 +10,7 @@ bool pid_alive(struct pid_struct *pid);
 struct pid_struct
 {
 	pid_t pid; //store the pid
+	bool being_traced;
 	bool is_child; //used to determine if this proc is a child of another proc
 	bool is_alive; //We use this to indicate whether the process is still running
 	char proc_name[50]; //store the program associated with the pid
@@ -30,6 +31,7 @@ struct pid_struct *create_pid_struct(pid_t pid, char *buff, bool is_child, struc
 	new_pid->pid = pid;
 	new_pid->is_child = is_child;
 	new_pid->is_alive = true;
+	new_pid->being_traced = false;
 	new_pid->next = n;
 	strcpy(new_pid->proc_name, buff);
 
