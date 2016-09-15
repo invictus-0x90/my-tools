@@ -120,8 +120,18 @@ int main(int argc, char **argv)
 			struct pid_struct *p = proc_list;
 
 			update_hash_table(p, my_table);
-       		
-			break;
+
+			/* free proc_list */
+			while(p->next != NULL)
+			{
+				struct pid_struct *tmp = p->next;
+				free(p);
+				p = tmp;
+			}
+			
+			/* Sleep to save system resources */
+			sleep(30);
+			//break;
 		}
 	}
 
