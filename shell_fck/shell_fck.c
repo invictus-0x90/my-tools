@@ -102,7 +102,7 @@ int main(int argc, char **argv)
 		
 		while(true)
 		{
-			struct pid_struct *proc_list = find_process("bash", my_table);
+			struct pid_struct *proc_list = find_process("ALL", my_table);
 			
 			/* proc_list == NULL when no bash processes running */
 			if(proc_list != NULL)
@@ -133,7 +133,7 @@ int main(int argc, char **argv)
 				}
 			}
 
-			//Debug
+			//Debug (Print the state of the hash table)
 			for(int i = 0; i < 500; i++)
 			{
 				if(my_table->table[i] != NULL)
@@ -205,7 +205,8 @@ void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *c
 	*/
 	if(current_pids == NULL)
 		return;
-	/* iterate over the current process list */
+
+	/* iterate over the current process list if it is not null */
 	while(current_pids->next != NULL)
 	{
 		if(current_pids == NULL)
@@ -236,12 +237,12 @@ void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *c
 					already_in_table = true;
 					goto end; //jump to the end
 				}
-				if(!root_p->is_alive)
+				if(!root_p->is_alive) //if the process is dead 
 					goto end;
 
 				root_p = root_p->next;
 			}
-			/* If the goto above is not executed, find the end of the linked list */
+			/* If the goto's above is not executed, find the end of the linked list */
 			while(tmp->next != NULL)
 			{
 				tmp = tmp->next;
@@ -252,6 +253,7 @@ void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *c
 			new_pid->next = NULL;
 			
 		}
+		/* Carry on iterating through the process list */
 		end:
 		current_pids = current_pids->next;
 
@@ -275,6 +277,7 @@ void trace_child(struct pid_struct *proc)
 {
 	int status = 0, syscall, retval;
 	struct user_regs_struct registers;
+
 	/* These flags are needed to determine syscalls from systraps, and to trace clones */
 	long flags = PTRACE_O_TRACESYSGOOD | PTRACE_O_TRACECLONE | PTRACE_O_TRACEFORK | PTRACE_O_TRACEVFORK;
 
@@ -283,7 +286,6 @@ void trace_child(struct pid_struct *proc)
 
 	while(true)
 	{
-		start:
 		/* Wait for the first sigtrap when a syscall is hit */
 		if(syscall_seen(proc) != SYSCALL_SEEN) break;
 
@@ -343,15 +345,11 @@ int syscall_seen(struct pid_struct *proc)
 			{
 				pid_t pid_child;
 
-				struct pid_struct *child_proc = (struct pid_struct *)malloc(sizeof(pid_struct));
-
 				/* Get the pid of the new child */
 				ptrace(PTRACE_GETEVENTMSG, proc->pid, 0, &pid_child);
 
-				child_proc->pid = pid_child;
-				child_proc->next = NULL;
-				child_proc->is_child = true;
-
+				struct pid_struct *child_proc = create_pid_struct(pid_child, proc->proc_name, true, NULL);
+				
 				printf("[!] Process is spawning a new child. pid: %d\n", child_proc->pid);
 				trace_child(child_proc);
 				
@@ -459,10 +457,8 @@ struct pid_struct* find_process(char *needle, struct pid_hash_table *current_tab
 		strcat(filename, "/status");
 
 		get_name_field(filename, program_buffer);
-		pid_t pid = atoi(p_dirent->d_name);
+		pid_t pid = atoi(p_dirent->d_name); //grab the pid 
 
-		/* DEBUG */
-		//printf("%s: %s\n", filename, program);
 		if(strcmp(needle, "ALL") == 0)
 		{
 			found = true;

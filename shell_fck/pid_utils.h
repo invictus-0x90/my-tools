@@ -32,7 +32,8 @@ struct pid_struct *create_pid_struct(pid_t pid, char *buff, bool is_child, struc
 	new_pid->is_child = is_child;
 	new_pid->is_alive = true;
 	new_pid->being_traced = false;
-	new_pid->next = n;
+	new_pid->next = n; 
+
 	strcpy(new_pid->proc_name, buff);
 
 	return new_pid;
