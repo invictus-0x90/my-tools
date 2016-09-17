@@ -20,7 +20,7 @@ struct pid_struct
 /* Simple hash table to store pid_structs */
 struct pid_hash_table
 {
-	struct pid_struct* table[500];
+	struct pid_struct **table;
 	int size;
 }pid_hash_table;
 

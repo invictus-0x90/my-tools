@@ -44,13 +44,15 @@ void remove_from_table(struct pid_struct *pid_delete, struct pid_struct *root)
 		/* Look for the pid to delete */
 		if(p->next == NULL)
 		{
-			free(p);
+			if(pid_delete != NULL)
+				free(pid_delete);
 			return;
 		}
 		else if(compare_pids(p->next, pid_delete))
 		{
 			p->next = pid_delete->next;
-			free(p);
+			if(pid_delete != NULL)
+				free(pid_delete);
 			return;
 		}
 		p = p->next;
@@ -64,7 +66,7 @@ void remove_from_table(struct pid_struct *pid_delete, struct pid_struct *root)
  * needle is the type process we want to attach to
  * not_pid is a pid we don't want to attach to, ie our current shell
 */
-void get_name_field(char *filename, char *buff);
+bool get_name_field(char *filename, char *buff);
 
 
 

@@ -94,6 +94,9 @@ int main(int argc, char **argv)
 		struct pid_hash_table *my_table = (struct pid_hash_table *)malloc(sizeof(pid_hash_table));
 		my_table->size = 500;
 
+		/* Allocate hashtable buckets */
+		my_table->table = malloc(sizeof(pid_struct) * my_table->size);
+
 		pthread_t thread_id;
 
 		/* Null out the buckets */
@@ -125,10 +128,8 @@ int main(int argc, char **argv)
 							pthread_create(&thread_id, NULL, init_thread, proc);
 							proc->being_traced = true; //mark this process as being traced
 						}
-						if(proc->next == NULL)
-							break;
-						else
-							proc = proc->next;
+						
+						proc = proc->next;
 					}
 				}
 			}
@@ -151,8 +152,6 @@ int main(int argc, char **argv)
 				}
 			}
 			
-			struct pid_struct *p = proc_list;
-
 			printf("SLEEP\n");
 			/* Sleep to save system resources */
 			sleep(30);
@@ -173,6 +172,7 @@ bool in_table(pid_t pid, struct pid_hash_table *table)
 
 		tmp = tmp->next;
 	}
+	return false;
 }
 
 void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *current_table)
@@ -181,6 +181,7 @@ void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *c
 	for(int i = 0; i < 500; i++)
 	{
 		struct pid_struct *p = current_table->table[i];
+
 		while(p != NULL)
 		{
 			/* If the process has been marked as no longer running */
@@ -188,7 +189,7 @@ void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *c
 			{
 				if(p->next == NULL)
 				{
-					free(current_table->table[i]);
+					free(p);
 					current_table->table[i] = NULL;
 				}
 				else
@@ -200,14 +201,8 @@ void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *c
 		}
 	}
 
-	/* this is here to ensure we can still delete entries in the hash table
-	 * without segfaulting on iterating over a null process list.
-	*/
-	if(current_pids == NULL)
-		return;
-
 	/* iterate over the current process list if it is not null */
-	while(current_pids->next != NULL)
+	while(current_pids != NULL)
 	{
 		if(current_pids == NULL)
 			break;
@@ -222,6 +217,7 @@ void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *c
 			//add the pid to the table
 			struct pid_struct *new_pid = create_pid_struct(current_pids->pid, current_pids->proc_name, current_pids->is_child, NULL);
 			current_table->table[bucket_position] = new_pid;
+			printf("[+] Added %d:%s to table\n", new_pid->pid, new_pid->proc_name);
 		}
 		else
 		{
@@ -251,6 +247,7 @@ void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *c
 			struct pid_struct *new_pid = create_pid_struct(current_pids->pid, current_pids->proc_name, current_pids->is_child, NULL);
 			tmp->next = new_pid;
 			new_pid->next = NULL;
+			printf("[+] Added %d:%s to table\n", new_pid->pid, new_pid->proc_name);
 			
 		}
 		/* Carry on iterating through the process list */
@@ -408,7 +405,7 @@ void get_data(pid_t pid, unsigned long addr, struct user_regs_struct *regs)
 		index += sizeof(long);
 
 	}
-	//printf("DATA FOUND:%s\n", val);
+	
 	free(val);
 
 }
@@ -425,6 +422,11 @@ struct pid_struct* find_process(char *needle, struct pid_hash_table *current_tab
 
 	/* Bit of linked list setup */
 	struct pid_struct *root = (struct pid_struct *) malloc(sizeof(pid_struct));
+
+	/* If we couldn't malloc a proc_list */
+	if(root == NULL)
+		return NULL;
+
 	struct pid_struct *p = root;
 
 	bool found = false;
@@ -456,12 +458,13 @@ struct pid_struct* find_process(char *needle, struct pid_hash_table *current_tab
 		strcat(filename, p_dirent->d_name);
 		strcat(filename, "/status");
 
-		get_name_field(filename, program_buffer);
+		bool got_name = get_name_field(filename, program_buffer);
+	
 		pid_t pid = atoi(p_dirent->d_name); //grab the pid 
 
-		if(strcmp(needle, "ALL") == 0)
+		if(strcmp(needle, "ALL") == 0 && got_name)
 		{
-			found = true;
+			
 			/* create a new pid struct with the details we have found */
 			memset(p->proc_name, 0, sizeof(p->proc_name));
 			p->pid = pid;
@@ -470,17 +473,16 @@ struct pid_struct* find_process(char *needle, struct pid_hash_table *current_tab
 			p->being_traced = false;
 			strncpy(p->proc_name, program_buffer, sizeof(p->proc_name));
 
-			p->next = (struct pid_struct *) malloc(sizeof(pid_struct));
-
-			printf("[+] Found %s process pid: %d [+]\n", p->proc_name, p->pid);
-
-			p = p->next;
+			if(current_table != NULL && !in_table(p->pid, current_table))
+			{	
+				p->next = (struct pid_struct *) malloc(sizeof(pid_struct));
+				found = true;
+				printf("[+] Found %s process pid: %d [+]\n", p->proc_name, p->pid);
+				p = p->next;
+			}
 		}
 		else if(strncmp(program_buffer, needle, sizeof(needle)) == 0)
-		{
-			found = true;
-			printf("[+] Found %s process pid: %s [+]\n", needle, p_dirent->d_name);
-				
+		{				
 			/*add that pid to the pid_struct, typical linked list */
 			memset(p->proc_name, 0, sizeof(p->proc_name));
 			p->pid = pid;
@@ -489,8 +491,13 @@ struct pid_struct* find_process(char *needle, struct pid_hash_table *current_tab
 			p->being_traced = false;
 			strncpy(p->proc_name, program_buffer, sizeof(p->proc_name));
 			
-			p->next = (struct pid_struct *) malloc(sizeof(pid_struct));
-			p = p->next;
+			if(current_table != NULL && !in_table(p->pid, current_table))
+			{	
+				p->next = (struct pid_struct *) malloc(sizeof(pid_struct));
+				printf("[+] Found %s process pid: %s [+]\n", needle, p_dirent->d_name);
+				found = true;
+				p = p->next;
+			}
 		}
 		
 		memset(filename, 0, sizeof(filename)); //reset filename
@@ -505,14 +512,14 @@ struct pid_struct* find_process(char *needle, struct pid_hash_table *current_tab
 	}
 	else
 	{
-		free(p->next); //free the malloced next pointer
+		free(p); //free the malloced next pointer
 		return root;
 	}
 	
 }
 
 /* We want to get the name associated with the pid */
-void get_name_field(char *filename, char *buff)
+bool get_name_field(char *filename, char *buff)
 {
 	FILE *fp;
 	
@@ -521,7 +528,7 @@ void get_name_field(char *filename, char *buff)
 
 	if((fp = fopen(filename, "r")) == NULL)
 	{
-		return;
+		return false;
 	}
 
 	fseek(fp, 6, SEEK_CUR); //seek past the "Name:\t" field
@@ -533,4 +540,6 @@ void get_name_field(char *filename, char *buff)
 	while(buff[++i] != '\n'); //handle the trailing new line
 
 	buff[i] = '\00';
+
+	return true;
 }
