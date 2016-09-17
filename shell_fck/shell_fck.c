@@ -107,7 +107,7 @@ int main(int argc, char **argv)
 
 		while(true)
 		{
-			if(timer == 1) //clear the hash table every 2.5 minutes
+			if(timer == 5) //clear the hash table every 2.5 minutes
 			{
 				printf("CLEARING\n");
 				clear_table(my_table);
