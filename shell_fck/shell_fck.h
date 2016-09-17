@@ -85,16 +85,10 @@ void clear_table(struct pid_hash_table *table)
 				}
 				else if(!tmp->being_traced && tmp->next != NULL)//free first proc in bucket
 				{
-					p = tmp->next;
+					p->next = tmp->next;
 					free(tmp);
-					table->table[i] = p;
+					//table->table[i] = p;
 					tmp = p;
-				}
-				else if(!tmp->being_traced)
-				{
-					p->next = tmp->next; //dont lose the rest of the list
-					free(tmp); 
-					tmp = p->next;
 				}
 				p = tmp;
 				tmp = tmp->next;

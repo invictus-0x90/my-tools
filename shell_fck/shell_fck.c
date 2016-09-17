@@ -119,10 +119,7 @@ int main(int argc, char **argv)
 			/* proc_list == NULL when no bash processes running */
 			if(proc_list != NULL)
 				update_hash_table(proc_list, my_table);
-			/* Just delete stuff from the hash table */
-			else
-				update_hash_table(NULL, my_table);
-
+			
 			/* Iterate over the hashtable and decide which processes to attach to */
 			for(int i = 0; i < 500; i++)
 			{
@@ -174,7 +171,10 @@ int main(int argc, char **argv)
 bool in_table(pid_t pid, struct pid_hash_table *table)
 {
 	struct pid_struct *tmp = table->table[pid%500];
-	while(tmp != NULL)
+	if(tmp == NULL)
+		return false;
+
+	while(tmp->next != NULL)
 	{
 		if(tmp->pid == pid)
 			return true;
@@ -186,40 +186,6 @@ bool in_table(pid_t pid, struct pid_hash_table *table)
 
 void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *current_table)
 {
-	/* Before adding new processes to the table, we delete any that have been marked as dead */
-	for(int i = 0; i < 500; i++)
-	{
-		struct pid_struct *p = current_table->table[i];
-
-		if(p != NULL && p->next == NULL) //check the first bucket
-		{
-			if(!pid_alive(p)) //if this is dead
-			{
-				free(p); //free it
-				current_table->table[i] = NULL; //set this bucket to NULL
-			}
-		}
-		else //otherwise iterate over the linked list
-		{
-			while(p != NULL)
-			{
-				/* If the process has been marked as no longer running */
-				if(!pid_alive(p))
-				{
-					if(p->next == NULL) //if it is at the end of the list
-					{
-						free(p);
-					}
-					else
-					{
-						remove_from_table(p, current_table->table[i]);
-					}
-				}
-				p = p->next;
-			}//end loop
-		}
-	}//end loop
-
 	/* iterate over the current process list if it is not null */
 	while(current_pids != NULL)
 	{
@@ -252,9 +218,6 @@ void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *c
 					already_in_table = true;
 					goto end; //jump to the end
 				}
-				if(!root_p->is_alive) //if the process is dead 
-					goto end;
-
 				root_p = root_p->next;
 			}
 			/* If the goto's above is not executed, find the end of the linked list */
@@ -383,7 +346,10 @@ int syscall_seen(struct pid_struct *proc)
 			if(proc->is_child) 
 				free(proc);
 			else 
-				proc->is_alive = false; //this child is ready to be removed from the hashtable
+			{
+				proc->is_alive = false;
+				proc->being_traced = false; //this child is ready to be removed from the hashtable
+			}
 			
 			printf("Child exiting...\n");
 			
