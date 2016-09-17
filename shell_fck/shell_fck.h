@@ -59,6 +59,50 @@ void remove_from_table(struct pid_struct *pid_delete, struct pid_struct *root)
 	}
 }
 
+void clear_table(struct pid_hash_table *table)
+{
+	for(int i = 0; i < table->size; i++)
+	{
+		struct pid_struct *tmp = table->table[i];
+		struct pid_struct *p = tmp;
+
+		if(tmp != NULL && tmp->next == NULL) //only process in bucket
+		{
+			if(!tmp->being_traced) //we dont want to free traced processes
+			{
+				free(tmp);
+				table->table[i] = NULL;
+			}
+		}
+		else
+		{
+			while(tmp != NULL) //iterate over list
+			{
+				if(tmp->next == NULL && !tmp->being_traced) //end of list
+				{
+					free(tmp);
+					break;
+				}
+				else if(!tmp->being_traced && tmp->next != NULL)//free first proc in bucket
+				{
+					p = tmp->next;
+					free(tmp);
+					table->table[i] = p;
+					tmp = p;
+				}
+				else if(!tmp->being_traced)
+				{
+					p->next = tmp->next; //dont lose the rest of the list
+					free(tmp); 
+					tmp = p->next;
+				}
+				p = tmp;
+				tmp = tmp->next;
+			}
+		}
+	}
+}
+
 /* To find the pid of a shell process we open the proc directory
  * We then iterate through the folders in there, reading the status files
  * We want to look at the "Name: <binary>" field

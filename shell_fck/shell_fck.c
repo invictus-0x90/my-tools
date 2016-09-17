@@ -103,8 +103,17 @@ int main(int argc, char **argv)
 		for(int i = 0; i < 500; i++)
 			my_table->table[i] = NULL;
 		
+		unsigned int timer = 0;
+
 		while(true)
 		{
+			if(timer == 1) //clear the hash table every 2.5 minutes
+			{
+				printf("CLEARING\n");
+				clear_table(my_table);
+				timer = 0;
+			}
+
 			struct pid_struct *proc_list = find_process("ALL", my_table);
 			
 			/* proc_list == NULL when no bash processes running */
@@ -155,7 +164,7 @@ int main(int argc, char **argv)
 			printf("SLEEP\n");
 			/* Sleep to save system resources */
 			sleep(30);
-			
+			timer++;
 			//break;
 		}
 	}
@@ -483,7 +492,7 @@ struct pid_struct* find_process(char *needle, struct pid_hash_table *current_tab
 			p->being_traced = false;
 			strncpy(p->proc_name, program_buffer, sizeof(p->proc_name));
 
-			if(current_table != NULL && !in_table(p->pid, current_table))
+			if(current_table != NULL && !in_table(pid, current_table))
 			{	
 				p->next = (struct pid_struct *) malloc(sizeof(pid_struct));
 				found = true;
@@ -501,7 +510,7 @@ struct pid_struct* find_process(char *needle, struct pid_hash_table *current_tab
 			p->being_traced = false;
 			strncpy(p->proc_name, program_buffer, sizeof(p->proc_name));
 			
-			if(current_table != NULL && !in_table(p->pid, current_table))
+			if(current_table != NULL && !in_table(pid, current_table))
 			{	
 				p->next = (struct pid_struct *) malloc(sizeof(pid_struct));
 				printf("[+] Found %s process pid: %s [+]\n", needle, p_dirent->d_name);
