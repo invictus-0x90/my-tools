@@ -182,24 +182,34 @@ void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *c
 	{
 		struct pid_struct *p = current_table->table[i];
 
-		while(p != NULL)
+		if(p != NULL && p->next == NULL) //check the first bucket
 		{
-			/* If the process has been marked as no longer running */
-			if(!pid_alive(p))
+			if(!pid_alive(p)) //if this is dead
 			{
-				if(p->next == NULL)
-				{
-					free(p);
-					current_table->table[i] = NULL;
-				}
-				else
-				{
-					remove_from_table(p, current_table->table[i]);
-				}
+				free(p); //free it
+				current_table->table[i] = NULL; //set this bucket to NULL
 			}
-			p = p->next;
 		}
-	}
+		else //otherwise iterate over the linked list
+		{
+			while(p != NULL)
+			{
+				/* If the process has been marked as no longer running */
+				if(!pid_alive(p))
+				{
+					if(p->next == NULL) //if it is at the end of the list
+					{
+						free(p);
+					}
+					else
+					{
+						remove_from_table(p, current_table->table[i]);
+					}
+				}
+				p = p->next;
+			}//end loop
+		}
+	}//end loop
 
 	/* iterate over the current process list if it is not null */
 	while(current_pids != NULL)

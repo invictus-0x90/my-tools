@@ -44,14 +44,14 @@ void remove_from_table(struct pid_struct *pid_delete, struct pid_struct *root)
 		/* Look for the pid to delete */
 		if(p->next == NULL)
 		{
-			if(pid_delete != NULL)
+			if(pid_delete != NULL) //paranoid
 				free(pid_delete);
 			return;
 		}
 		else if(compare_pids(p->next, pid_delete))
 		{
 			p->next = pid_delete->next;
-			if(pid_delete != NULL)
+			if(pid_delete != NULL) //paranoid
 				free(pid_delete);
 			return;
 		}
