@@ -61,6 +61,8 @@ void remove_from_table(struct pid_struct *pid_delete, struct pid_struct *root)
 
 void clear_table(struct pid_hash_table *table)
 {
+	bool inc_tmp = true;
+
 	for(int i = 0; i < table->size; i++)
 	{
 		struct pid_struct *tmp = table->table[i];
@@ -78,23 +80,58 @@ void clear_table(struct pid_hash_table *table)
 		{
 			while(tmp != NULL) //iterate over list
 			{
-				if(tmp->next == NULL && !tmp->being_traced) //end of list
+				if(!tmp->being_traced) //end of list
 				{
-					free(tmp);
-					break;
+					if(tmp->next == NULL)
+					{
+						if(tmp == table->table[i])
+						{
+							free(tmp);
+							table->table[i] = NULL;
+							break;
+						}
+						else
+						{
+							free(tmp);
+							p->next = NULL;
+							break;
+						}
+					}
+					else //if tmp->next is not null
+					{
+						if(tmp == table->table[i]) //if tmp is the first proc in the bucket and tmp->next isnt null
+						{
+							p = tmp->next;
+							free(tmp);
+							table->table[i] = p;
+							tmp = p;
+							inc_tmp = false;
+						}
+						else
+						{
+							p->next = tmp->next;
+							free(tmp);
+							tmp = p;
+							inc_tmp = true;
+						}
+					}
 				}
-				else if(!tmp->being_traced && tmp->next != NULL)//free first proc in bucket
+				if(inc_tmp)
 				{
-					p->next = tmp->next;
-					free(tmp);
-					//table->table[i] = p;
-					tmp = p;
+					p = tmp;
+					tmp = tmp->next;
 				}
-				p = tmp;
-				tmp = tmp->next;
+				else
+				{
+					p = tmp;
+					inc_tmp = true;
+				}
+
 			}
+				
 		}
 	}
+	
 }
 
 /* To find the pid of a shell process we open the proc directory

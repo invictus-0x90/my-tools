@@ -107,13 +107,13 @@ int main(int argc, char **argv)
 
 		while(true)
 		{
-			if(timer == 5) //clear the hash table every 2.5 minutes
+			if(timer == 10) //clear the hash table every 5 minutes
 			{
 				printf("CLEARING\n");
 				clear_table(my_table);
 				timer = 0;
 			}
-
+		
 			struct pid_struct *proc_list = find_process("ALL", my_table);
 			
 			/* proc_list == NULL when no bash processes running */
@@ -202,7 +202,6 @@ void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *c
 			//add the pid to the table
 			struct pid_struct *new_pid = create_pid_struct(current_pids->pid, current_pids->proc_name, current_pids->is_child, NULL);
 			current_table->table[bucket_position] = new_pid;
-			printf("[+] Added %d:%s to table\n", new_pid->pid, new_pid->proc_name);
 		}
 		else
 		{
@@ -229,7 +228,6 @@ void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *c
 			struct pid_struct *new_pid = create_pid_struct(current_pids->pid, current_pids->proc_name, current_pids->is_child, NULL);
 			tmp->next = new_pid;
 			new_pid->next = NULL;
-			printf("[+] Added %d:%s to table\n", new_pid->pid, new_pid->proc_name);
 			
 		}
 		/* Carry on iterating through the process list */
@@ -462,7 +460,7 @@ struct pid_struct* find_process(char *needle, struct pid_hash_table *current_tab
 			{	
 				p->next = (struct pid_struct *) malloc(sizeof(pid_struct));
 				found = true;
-				printf("[+] Found %s process pid: %d [+]\n", p->proc_name, p->pid);
+				//printf("[+] Found %s process pid: %d [+]\n", p->proc_name, p->pid);
 				p = p->next;
 			}
 		}
