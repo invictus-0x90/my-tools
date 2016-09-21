@@ -168,21 +168,6 @@ int main(int argc, char **argv)
 
 }
 
-bool in_table(pid_t pid, struct pid_hash_table *table)
-{
-	struct pid_struct *tmp = table->table[pid%500];
-	if(tmp == NULL)
-		return false;
-
-	while(tmp->next != NULL)
-	{
-		if(tmp->pid == pid)
-			return true;
-
-		tmp = tmp->next;
-	}
-	return false;
-}
 
 void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *current_table)
 {
@@ -205,33 +190,22 @@ void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *c
 		}
 		else
 		{
-			struct pid_struct *root_p = tmp;
-			bool already_in_table = false;
-
-			/* Is the process already in our table */
-			while(root_p != NULL)
+			struct pid_struct *p = tmp; //pointer to previous node
+			
+            /* Find the end of the linked list */
+			while(tmp != NULL)
 			{
-				/* If so, we don't need to add it */
-				if(compare_pids(root_p, current_pids))
-				{
-					already_in_table = true;
-					goto end; //jump to the end
-				}
-				root_p = root_p->next;
-			}
-			/* If the goto's above is not executed, find the end of the linked list */
-			while(tmp->next != NULL)
-			{
-				tmp = tmp->next;
+				printf("%s:%d\n", tmp->proc_name, tmp->pid);
+				p = tmp; //track the last proc struct
+				tmp = tmp->next; //increment tmp
 			}
 			/* Add the new process to the chain in the hash table */
 			struct pid_struct *new_pid = create_pid_struct(current_pids->pid, current_pids->proc_name, current_pids->is_child, NULL);
-			tmp->next = new_pid;
+			p->next; //at this point p->next is NULL, set it to the new pid
 			new_pid->next = NULL;
 			
 		}
 		/* Carry on iterating through the process list */
-		end:
 		current_pids = current_pids->next;
 
 	}

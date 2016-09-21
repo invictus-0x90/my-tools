@@ -34,6 +34,21 @@ void usage();
 
 void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *current_table);
 
+bool in_table(pid_t pid, struct pid_hash_table *table)
+{
+	struct pid_struct *tmp = table->table[pid%500];
+	if(tmp == NULL)
+		return false;
+
+	while(tmp->next != NULL)
+	{
+		if(tmp->pid == pid)
+			return true;
+
+		tmp = tmp->next;
+	}
+	return false;
+}
 
 void remove_from_table(struct pid_struct *pid_delete, struct pid_struct *root)
 {
