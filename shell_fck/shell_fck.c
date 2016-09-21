@@ -195,7 +195,6 @@ void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *c
             /* Find the end of the linked list */
 			while(tmp != NULL)
 			{
-				printf("%s:%d\n", tmp->proc_name, tmp->pid);
 				p = tmp; //track the last proc struct
 				tmp = tmp->next; //increment tmp
 			}
