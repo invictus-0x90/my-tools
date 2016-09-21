@@ -172,16 +172,14 @@ int main(int argc, char **argv)
 void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *current_table)
 {
 	/* iterate over the current process list if it is not null */
-	while(current_pids != NULL)
+	while(current_pids->next != NULL)
 	{
-		if(current_pids == NULL)
-			break;
 		/* We set the bucket position to the pid modulo bucket size */
 		int bucket_position = (current_pids->pid % current_table->size);
 
 		/* We need to create a tmp pid struct to check if that position has a pid in it */
 		struct pid_struct *tmp = current_table->table[bucket_position];
-
+		
 		if(tmp == NULL) //this means that the position is free
 		{
 			//add the pid to the table
@@ -190,17 +188,15 @@ void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *c
 		}
 		else
 		{
-			struct pid_struct *p = tmp; //pointer to previous node
-			
             /* Find the end of the linked list */
-			while(tmp != NULL)
+			while(tmp->next != NULL)
 			{
-				p = tmp; //track the last proc struct
+				//p = tmp; //track the last proc struct
 				tmp = tmp->next; //increment tmp
 			}
 			/* Add the new process to the chain in the hash table */
 			struct pid_struct *new_pid = create_pid_struct(current_pids->pid, current_pids->proc_name, current_pids->is_child, NULL);
-			p->next; //at this point p->next is NULL, set it to the new pid
+			tmp->next = new_pid; //at this point p->next is NULL, set it to the new pid
 			new_pid->next = NULL;
 			
 		}
@@ -433,7 +429,7 @@ struct pid_struct* find_process(char *needle, struct pid_hash_table *current_tab
 			{	
 				p->next = (struct pid_struct *) malloc(sizeof(pid_struct));
 				found = true;
-				//printf("[+] Found %s process pid: %d [+]\n", p->proc_name, p->pid);
+				printf("[+] Found %s process pid: %d [+]\n", p->proc_name, p->pid);
 				p = p->next;
 			}
 		}

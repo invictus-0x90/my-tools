@@ -40,7 +40,7 @@ bool in_table(pid_t pid, struct pid_hash_table *table)
 	if(tmp == NULL)
 		return false;
 
-	while(tmp->next != NULL)
+	while(tmp != NULL)
 	{
 		if(tmp->pid == pid)
 			return true;
