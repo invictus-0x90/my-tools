@@ -30,13 +30,42 @@
 void usage();
 
 
+void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *current_table)
+{
+	/* iterate over the current process list if it is not null */
+	while(current_pids != NULL)
+	{
+		/* We set the bucket position to the pid modulo bucket size */
+		unsigned int bucket_position = (current_pids->pid % current_table->size);
 
+		/* We need to create a tmp pid struct to check if that position has a pid in it */
+		struct pid_struct *tmp = current_table->table[bucket_position];
+		
+		if(tmp == NULL) //this means that the position is free
+		{
+			//add the pid to the table
+			struct pid_struct *new_pid = create_pid_struct(current_pids->pid, current_pids->proc_name, current_pids->is_child, NULL);
+			current_table->table[bucket_position] = new_pid;
+		}
+		else
+		{
+			/* Add the new process to the chain in the hash table */
+			struct pid_struct *new_pid = create_pid_struct(current_pids->pid, current_pids->proc_name, current_pids->is_child, NULL);
 
-void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *current_table);
+			new_pid->next = tmp;
+			current_table->table[bucket_position] = new_pid;
+			
+		}
+		/* Carry on iterating through the process list */
+		current_pids = current_pids->next;
+
+	}
+	
+}
 
 bool in_table(pid_t pid, struct pid_hash_table *table)
 {
-	struct pid_struct *tmp = table->table[pid%500];
+	struct pid_struct *tmp = table->table[pid % table->size];
 	if(tmp == NULL)
 		return false;
 
@@ -166,13 +195,10 @@ bool get_name_field(char *filename, char *buff);
 
 void *init_thread(void *args);
 
-
-
-
-
-
-
-
+/*
+* This function enumerates the /proc/ directory to find currently running processes
+* Each process is then appended to a linked list which is returned upon completion
+*/
 struct pid_struct* find_process(char *needle, struct pid_hash_table *current_table);
 
 

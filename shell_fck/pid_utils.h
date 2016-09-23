@@ -17,12 +17,14 @@ struct pid_struct
 	struct pid_struct *next; //pointer to next pid
 }pid_struct;
 
+
 /* Simple hash table to store pid_structs */
 struct pid_hash_table
 {
 	struct pid_struct **table;
 	int size;
 }pid_hash_table;
+
 
 struct pid_struct *create_pid_struct(pid_t pid, char *buff, bool is_child, struct pid_struct *n)
 {
@@ -42,7 +44,6 @@ struct pid_struct *create_pid_struct(pid_t pid, char *buff, bool is_child, struc
 bool compare_pids(struct pid_struct *pid_one, struct pid_struct *pid_two)
 {
 	return pid_one->pid == pid_two->pid;
-	//return (pid_one->pid == pid_two->pid) && (strcmp(pid_one->proc_name, pid_two->proc_name) == 0);
 }
 
 bool pid_alive(struct pid_struct *pid)
