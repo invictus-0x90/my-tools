@@ -64,10 +64,10 @@ int main(int argc, char **argv)
 	{
 		/* Initialise hash table */
 		struct pid_hash_table *my_table = (struct pid_hash_table *)malloc(sizeof(pid_hash_table));
-		my_table->size = 500;
+		my_table->size = 100;
 
 		/* Allocate hashtable buckets */
-		my_table->table = malloc(sizeof(pid_struct) * my_table->size);
+		my_table->table = malloc(sizeof(struct pid_struct*) * my_table->size);
 
 		pthread_t thread_id;
 
@@ -79,7 +79,7 @@ int main(int argc, char **argv)
 
 		while(true)
 		{
-			if(timer == 0) //clear the hash table every 5 minutes
+			if(timer == 1) //clear the hash table every 5 minutes
 			{
 				printf("CLEARING\n");
 				clear_table(my_table);
