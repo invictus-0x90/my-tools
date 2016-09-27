@@ -29,6 +29,7 @@
 /* Simple usage function */
 void usage();
 
+void persist();
 
 void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *current_table)
 {

