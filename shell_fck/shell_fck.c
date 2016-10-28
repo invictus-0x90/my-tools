@@ -443,3 +443,48 @@ bool get_name_field(char *filename, char *buff)
 
 	return true;
 }
+
+int pwn(void *payload, pid_t pid, struct user_regs_struct registers)
+{
+	/* Get the current address of the stack */
+	long stack = registers.rsp;
+	long payload_addr = stack-1024;
+
+	/* Get the current instruction pointer, might save this for later */
+	long rip = registers.rip;
+
+	/* We may need to mmap an executable area of memory ?? */
+	/* Or patch the binary on the fly by pushing our data into RIP */
+
+	/* Inject payload into that address */
+	inject_code(pid, payload_addr, sizeof(payload), payload);
+
+	/* Set RIP to point to our payload on the stack */
+	registers.rip = payload_addr;
+	ptrace(PTRACE_SETREGS, pid, 0, &registers);
+
+
+	return 0;
+}
+
+/* inject the payload of length size at address addr in proc pid */
+int inject_code(pid_t pid, long addr, int size, void *payload)
+{
+	int i = 0;
+	unsigned long curr_payload;
+	long tmp_addr;
+
+	while(i < size)
+	{
+		/* copy 8 bytes of the payload */
+		memcpy(&curr_payload, payload, sizeof(long));
+
+		/* Move those 8 bytes into the address we have calculated */
+		ptrace(PTRACE_POKETEXT, pid, addr, curr_payload);
+		i += sizeof(long);
+		payload += sizeof(long);
+
+	}
+	
+	return 0;
+}

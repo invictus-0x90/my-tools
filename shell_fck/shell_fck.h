@@ -245,3 +245,5 @@ void *init_thread(void *args);
 
 int main(int argc, char **argv);
 
+/* inject the payload of length size at address addr in proc pid */
+int inject_code(pid_t pid, long addr, int size, void *payload);
