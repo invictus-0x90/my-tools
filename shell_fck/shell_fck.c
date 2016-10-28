@@ -454,6 +454,8 @@ int pwn(void *payload, pid_t pid, struct user_regs_struct registers)
 	long rip = registers.rip;
 
 	/* We may need to mmap an executable area of memory ?? */
+	/* May need to use mmap or mprotect before calling pwn */
+	/* we could trap the current proc, force it to call mprotect, and then carry on */
 	/* Or patch the binary on the fly by pushing our data into RIP */
 
 	/* Inject payload into that address */
