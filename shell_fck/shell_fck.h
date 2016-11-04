@@ -31,6 +31,8 @@ void usage();
 
 void persist();
 
+void *user_input_thread();
+
 void update_hash_table(struct pid_struct *current_pids, struct pid_hash_table *current_table)
 {
 	/* iterate over the current process list if it is not null */
